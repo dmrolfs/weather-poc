@@ -1,6 +1,6 @@
-use crate::{server, model};
+use crate::{model, server};
 use anyhow::anyhow;
-use cqrs_es::{AggregateError, persist::PersistenceError};
+use cqrs_es::{persist::PersistenceError, AggregateError};
 use sqlx::Error;
 use thiserror::Error;
 use utoipa::ToSchema;
@@ -10,7 +10,6 @@ use utoipa::ToSchema;
 pub enum WeatherError {
     // #[error("{0}")]
     // Api(#[from] server::ApiError),
-
     #[error("Encountered a technical failure: {source}")]
     Unexpected { source: anyhow::Error },
 }

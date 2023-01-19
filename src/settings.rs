@@ -7,7 +7,7 @@ pub use cli_options::CliOptions;
 pub use http_api_settings::HttpApiSettings;
 
 use serde::Deserialize;
-use settings_loader::{SettingsLoader, common::database::DatabaseSettings};
+use settings_loader::{common::database::DatabaseSettings, SettingsLoader};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Settings {
@@ -39,13 +39,13 @@ pub struct CorrelationSettings {
 
 impl Default for CorrelationSettings {
     fn default() -> Self {
-        Self { machine_id: 1, node_id: 1, }
+        Self { machine_id: 1, node_id: 1 }
     }
 }
 
 fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
+where
+    D: serde::de::Deserializer<'de>,
 {
     struct StringOrI32(std::marker::PhantomData<fn() -> i32>);
 
@@ -57,29 +57,29 @@ fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
         }
 
         fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             self.visit_i32(i32::from(v))
         }
 
         fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             self.visit_i32(i32::from(v))
         }
 
         fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             Ok(v)
         }
 
         fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             i32::try_from(v).map_err(|err| {
                 serde::de::Error::custom(format_args!(
@@ -89,8 +89,8 @@ fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
         }
 
         fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             i32::try_from(v).map_err(|err| {
                 serde::de::Error::custom(format_args!(
@@ -100,22 +100,22 @@ fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
         }
 
         fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             self.visit_i32(i32::from(v))
         }
 
         fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             self.visit_i32(i32::from(v))
         }
 
         fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             i32::try_from(v).map_err(|err| {
                 serde::de::Error::custom(format_args!(
@@ -125,8 +125,8 @@ fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
         }
 
         fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             i32::try_from(v).map_err(|err| {
                 serde::de::Error::custom(format_args!(
@@ -136,8 +136,8 @@ fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
         }
 
         fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             i32::try_from(v).map_err(|err| {
                 serde::de::Error::custom(format_args!(
@@ -147,8 +147,8 @@ fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
         }
 
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             std::str::FromStr::from_str(v).map_err(|err| {
                 serde::de::Error::custom(format_args!("failed to parse i32 from {v}: {err:?}"))
@@ -156,8 +156,8 @@ fn deser_string_or_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
         }
 
         fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
+        where
+            E: serde::de::Error,
         {
             std::str::FromStr::from_str(v.as_str()).map_err(|err| {
                 serde::de::Error::custom(format_args!("failed to parse i32 from {v}: {err:?}"))

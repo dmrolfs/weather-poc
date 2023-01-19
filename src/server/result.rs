@@ -1,7 +1,11 @@
-use axum::{Json, http::StatusCode, response::{IntoResponse, Response}};
+use super::errors::ApiError;
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::Serialize;
 use std::borrow::Cow;
-use super::errors::ApiError;
 
 pub type HttpResult = Result<Response, ApiError>;
 

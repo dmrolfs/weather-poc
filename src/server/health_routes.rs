@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-use axum::{routing, Json, Router,};
+use super::state::{AppState, WEATHER_QUERY_VIEW};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use serde_json::json;
-use utoipa::{OpenApi, ToSchema};
-use super::state::{AppState, WEATHER_QUERY_VIEW};
-use sql_query_builder as sql;
+use axum::{routing, Json, Router};
 use itertools::Itertools;
-use strum::{Display, EnumString, EnumVariantNames};
 use serde::Serialize;
+use serde_json::json;
+use sql_query_builder as sql;
+use std::collections::HashMap;
+use strum::{Display, EnumString, EnumVariantNames};
+use utoipa::{OpenApi, ToSchema};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -29,8 +29,20 @@ pub fn api() -> Router<AppState> {
         .route("/deep", routing::get(serve_deep_health))
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Display, EnumString, EnumVariantNames, ToSchema, Serialize)]
-#[strum(serialize_all="camelCase", ascii_case_insensitive)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Display,
+    EnumString,
+    EnumVariantNames,
+    ToSchema,
+    Serialize,
+)]
+#[strum(serialize_all = "camelCase", ascii_case_insensitive)]
 pub enum HealthStatus {
     Up,
     NotReady,
@@ -44,7 +56,9 @@ pub struct HealthStatusReport {
 }
 
 impl From<HealthStatus> for HealthStatusReport {
-    fn from(status: HealthStatus) -> Self { Self { status } }
+    fn from(status: HealthStatus) -> Self {
+        Self { status }
+    }
 }
 
 impl From<HealthStatus> for StatusCode {
@@ -68,7 +82,7 @@ impl From<HealthStatus> for StatusCode {
     )
 )]
 #[axum::debug_handler]
-#[tracing::instrument(level="trace", skip(app))]
+#[tracing::instrument(level = "trace", skip(app))]
 async fn serve_health(State(app): State<AppState>) -> impl IntoResponse {
     let (system_health, _) = check_health(app).await;
     let status_code: StatusCode = system_health.into();
@@ -86,18 +100,23 @@ async fn serve_health(State(app): State<AppState>) -> impl IntoResponse {
     )
 )]
 #[axum::debug_handler]
-#[tracing::instrument(level="trace", skip(app))]
+#[tracing::instrument(level = "trace", skip(app))]
 async fn serve_deep_health(State(app): State<AppState>) -> impl IntoResponse {
     let (system_health, _health_report) = check_health(app).await;
     serde_json::to_value::<HealthStatusReport>(system_health.into())
         .map(|resp| (system_health.into(), Json(resp)))
-        .unwrap_or_else(|error| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": error.to_string() }))))
+        .unwrap_or_else(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": error.to_string() })),
+            )
+        })
 }
-
 
 #[tracing::instrument(level = "trace", skip(state))]
 async fn check_health(state: AppState) -> (HealthStatus, HashMap<HealthStatus, Vec<&'static str>>) {
-    let weather_view_select_sql = sql::Select::new().select("version").from(WEATHER_QUERY_VIEW).to_string();
+    let weather_view_select_sql =
+        sql::Select::new().select("version").from(WEATHER_QUERY_VIEW).to_string();
     let weather_view_status: Result<(), anyhow::Error> = sqlx::query(&weather_view_select_sql)
         .fetch_optional(&state.db_pool)
         .await

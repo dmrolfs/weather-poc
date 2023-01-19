@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use crate::model::{QuantitativeValue, WeatherFrame};
 use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, View};
 use iso8601_timestamp::Timestamp;
 use postgres_es::PostgresViewRepository;
-use crate::model::{LocationWeather, QuantitativeValue};
-use utoipa::ToSchema;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use utoipa::ToSchema;
 
 pub type WeatherViewRepository = PostgresViewRepository<WeatherView, LocationZone>;
 pub type WeatherViewProjection = Arc<WeatherViewRepository>;
@@ -13,7 +13,7 @@ pub type WeatherViewProjection = Arc<WeatherViewRepository>;
 pub type WeatherQuery = GenericQuery<WeatherViewRepository, WeatherView, LocationZone>;
 
 #[derive(Debug, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct WeatherView {
     pub timestamp: Timestamp,
 
@@ -90,34 +90,32 @@ impl Default for WeatherView {
     }
 }
 
-impl From<LocationWeather> for WeatherView {
-    fn from(value: LocationWeather) -> Self {
+impl From<WeatherFrame> for WeatherView {
+    fn from(value: WeatherFrame) -> Self {
         Self {
             timestamp: value.timestamp,
             temperature: Some(value.temperature),
-            dewpoint: Some(value.dewpoint),
-            wind_direction: Some(value.wind_direction),
-            wind_speed: Some(value.wind_speed),
-            wind_gust: Some(value.wind_gust),
-            barometric_pressure: Some(value.barometric_pressure),
-            sea_level_pressure: Some(value.sea_level_pressure),
-            visibility: Some(value.visibility),
-            max_temperature_last_24_hours: Some(value.max_temperature_last_24_hours),
-            min_temperature_last_24_hours: Some(value.min_temperature_last_24_hours),
-            precipitation_last_hour: Some(value.precipitation_last_hour),
-            precipitation_last_3_hours: Some(value.precipitation_last_3_hours),
-            precipitation_last_6_hours: Some(value.precipitation_last_6_hours),
-            relative_humidity: Some(value.relative_humidity),
-            wind_chill: Some(value.wind_chill),
-            heat_index: Some(value.heat_index),
+            ..Default::default() // dewpoint: Some(value.dewpoint),
+                                 // wind_direction: Some(value.wind_direction),
+                                 // wind_speed: Some(value.wind_speed),
+                                 // wind_gust: Some(value.wind_gust),
+                                 // barometric_pressure: Some(value.barometric_pressure),
+                                 // sea_level_pressure: Some(value.sea_level_pressure),
+                                 // visibility: Some(value.visibility),
+                                 // max_temperature_last_24_hours: Some(value.max_temperature_last_24_hours),
+                                 // min_temperature_last_24_hours: Some(value.min_temperature_last_24_hours),
+                                 // precipitation_last_hour: Some(value.precipitation_last_hour),
+                                 // precipitation_last_3_hours: Some(value.precipitation_last_3_hours),
+                                 // precipitation_last_6_hours: Some(value.precipitation_last_6_hours),
+                                 // relative_humidity: Some(value.relative_humidity),
+                                 // wind_chill: Some(value.wind_chill),
+                                 // heat_index: Some(value.heat_index),
         }
     }
 }
 
 impl View<LocationZone> for WeatherView {
     fn update(&mut self, event: &EventEnvelope<LocationZone>) {
-        match &event.payload {
-
-        }
+        match &event.payload {}
     }
 }

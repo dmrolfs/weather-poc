@@ -1,12 +1,12 @@
-use axum::{Router, routing};
+use super::state::{AppState, WEATHER_QUERY_VIEW};
+use crate::model::{registrar, RegistrarAggregate};
 use axum::extract::State;
 use axum::response::IntoResponse;
-use utoipa::{OpenApi, ToSchema};
-use super::state::{AppState, WEATHER_QUERY_VIEW};
-use sql_query_builder as sql;
+use axum::{routing, Router};
 use itertools::Itertools;
+use sql_query_builder as sql;
 use strum_macros::EnumVariantNames;
-use crate::model::{registrar, RegistrarAggregate};
+use utoipa::{OpenApi, ToSchema};
 
 pub struct WeatherApiDoc;
 
@@ -27,8 +27,7 @@ pub fn api() -> Router<AppState> {
     ),
 )]
 #[axum::debug_handler]
-#[tracing::instrument(level="trace", skip(loc_registrar))]
+#[tracing::instrument(level = "trace", skip(loc_registrar))]
 async fn update_weather(State(loc_registrar): State<RegistrarAggregate>) -> impl IntoResponse {
     let aggregate_id = registrar::generate_id();
-
 }

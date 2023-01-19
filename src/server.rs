@@ -1,16 +1,16 @@
-mod result;
 mod errors;
-mod state;
 mod health_routes;
-mod weather_routes;
 mod queries;
+mod result;
+mod state;
+mod weather_routes;
 
-use tokio::task::JoinHandle;
 use errors::ApiError;
+use tokio::task::JoinHandle;
 
 pub type HttpJoinHandle = JoinHandle<Result<(), ApiError>>;
 
 struct Server {
-    port:u16,
+    port: u16,
     server_handle: HttpJoinHandle,
 }

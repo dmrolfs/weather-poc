@@ -1,25 +1,26 @@
-pub use protocol::{RegistrarCommand, RegistrarEvent,};
-pub use service::{RegistrarServices, HappyPathServices};
 pub use errors::RegistrarError;
+pub use protocol::{RegistrarCommand, RegistrarEvent};
+pub use service::{HappyPathServices, RegistrarServices};
 
-use service::RegistrarApi;
+use super::Location;
+use crate::model::LocationZoneCode;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use postgres_es::PostgresCqrs;
+use pretty_snowflake::{Id, Label};
+use serde::{Deserialize, Serialize};
+use service::RegistrarApi;
 use std::collections::HashMap;
 use std::sync::Arc;
-use postgres_es::PostgresCqrs;
-use pretty_snowflake::Id;
-use crate::model::LocationZoneCode;
-use super::Location;
-use serde::{Serialize, Deserialize};
-use pretty_snowflake::Label;
 
 pub type RegistrarAggregate = Arc<PostgresCqrs<Registrar>>;
 
 pub const AGGREGATE_TYPE: &str = "registrar";
 
 #[inline]
-pub fn generate_id() -> Id<Registrar> { pretty_snowflake::generator::next_id() }
+pub fn generate_id() -> Id<Registrar> {
+    pretty_snowflake::generator::next_id()
+}
 
 #[derive(Debug, Default, Clone, Label, PartialEq, Serialize, Deserialize)]
 pub struct Registrar {
@@ -38,7 +39,9 @@ impl Aggregate for Registrar {
     }
 
     #[tracing::instrument(level = "trace", skip())]
-    async fn handle(&self, command: Self::Command, service: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &self, command: Self::Command, service: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
             Self::Command::UpdateWeather => {
                 let loc_codes: Vec<_> = self.location_codes.iter().collect();
@@ -60,15 +63,17 @@ impl Aggregate for Registrar {
 }
 
 mod service {
+    use super::RegistrarError;
+    use crate::model::registrar::RegistrarEvent;
+    use crate::model::{Location, LocationZoneCode};
     use async_trait::async_trait;
     use chrono::format::Item;
-    use crate::model::{Location, LocationZoneCode};
-    use crate::model::registrar::RegistrarEvent;
-    use super::RegistrarError;
 
     #[async_trait]
     pub trait RegistrarApi: Sync + Send {
-        async fn update_weather(&self, zones: &[(&Location, &LocationZoneCode)]) -> Result<Vec<RegistrarEvent>, RegistrarError>;
+        async fn update_weather(
+            &self, zones: &[(&Location, &LocationZoneCode)],
+        ) -> Result<Vec<RegistrarEvent>, RegistrarError>;
     }
 
     #[derive(Debug, Clone)]
@@ -79,7 +84,9 @@ mod service {
 
     #[async_trait]
     impl RegistrarApi for RegistrarServices {
-        async fn update_weather(&self, zones: &[(&Location, &LocationZoneCode)]) -> Result<Vec<RegistrarEvent>, RegistrarError> {
+        async fn update_weather(
+            &self, zones: &[(&Location, &LocationZoneCode)],
+        ) -> Result<Vec<RegistrarEvent>, RegistrarError> {
             match self {
                 // Self::AggregatePath(svc) => svc.update_weather(zones).await,
                 Self::HappyPath(svc) => svc.update_weather(zones).await,
@@ -103,7 +110,9 @@ mod service {
 
     #[async_trait]
     impl RegistrarApi for HappyPathServices {
-        async fn update_weather(&self, zones: &[(&Location, &LocationZoneCode)]) -> Result<Vec<RegistrarEvent>, RegistrarError> {
+        async fn update_weather(
+            &self, zones: &[(&Location, &LocationZoneCode)],
+        ) -> Result<Vec<RegistrarEvent>, RegistrarError> {
             let events = zones
                 .iter()
                 .map(|(loc, zone)| RegistrarEvent::LocationAdded(**loc, (*zone).clone()))
@@ -114,9 +123,9 @@ mod service {
 }
 
 mod protocol {
-    use cqrs_es::DomainEvent;
-    use serde::{Serialize, Deserialize};
     use crate::model::{Location, LocationZoneCode};
+    use cqrs_es::DomainEvent;
+    use serde::{Deserialize, Serialize};
     use strum::Display;
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,12 +143,27 @@ mod protocol {
     }
 
     impl DomainEvent for RegistrarEvent {
-        fn event_type(&self) -> String { self.to_string() }
+        fn event_type(&self) -> String {
+            self.to_string()
+        }
 
-        fn event_version(&self) -> String { VERSION.to_string() }
+        fn event_version(&self) -> String {
+            VERSION.to_string()
+        }
     }
 }
 
 mod errors {
+    use std::fmt;
+
+    #[derive(Debug)]
     pub struct RegistrarError;
+
+    impl fmt::Display for RegistrarError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", "RegistrarError")
+        }
+    }
+
+    impl std::error::Error for RegistrarError {}
 }
