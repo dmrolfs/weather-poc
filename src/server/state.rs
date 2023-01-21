@@ -1,6 +1,6 @@
 use super::errors::ApiError;
-use crate::model::registrar::{Registrar, RegistrarServices};
-use crate::model::{registrar, RegistrarAggregate};
+use crate::model::registrar::{self, Registrar, RegistrarAggregate, RegistrarServices};
+use crate::model::zone::{self, LocationServices, LocationZone, LocationZoneAggregate};
 use crate::server::queries::{TracingQuery, WeatherQuery, WeatherViewProjection};
 use axum::extract::FromRef;
 use cqrs_es::Query;
@@ -49,7 +49,7 @@ pub async fn initialize_api_state(db_pool: PgPool) -> Result<AppState, ApiError>
         Box::new(location_zone_tracing_query),
         Box::new(weather_query),
     ];
-    let location_services = registrar::RegistrarServices::HappyPath(registrar::HappyPathServices);
+    let location_services = LocationServices::HappyPath(zone::HappyPathLocationServices);
     let location_agg = Arc::new(postgres_es::postgres_cqrs(
         db_pool.clone(),
         location_queries,
@@ -70,7 +70,7 @@ pub async fn initialize_api_state(db_pool: PgPool) -> Result<AppState, ApiError>
 pub struct AppState {
     pub registrar_agg: RegistrarAggregate,
     pub update_locations_agg: UpdateLocationsSaga,
-    pub location_agg: LocationAggregate,
+    pub location_agg: LocationZoneAggregate,
     pub weather_view: WeatherViewProjection,
     pub db_pool: PgPool,
 }
@@ -93,7 +93,7 @@ impl FromRef<AppState> for UpdateLocationsSaga {
     }
 }
 
-impl FromRef<AppState> for LocationAggregate {
+impl FromRef<AppState> for LocationZoneAggregate {
     fn from_ref(app: &AppState) -> Self {
         app.location_agg.clone()
     }

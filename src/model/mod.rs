@@ -1,18 +1,36 @@
+mod frame;
 pub mod registrar;
 pub mod zone;
 
+pub use frame::WeatherFrame;
 pub use registrar::{Registrar, RegistrarAggregate};
 pub use zone::{LocationZone, LocationZoneAggregate};
 
-use iso8601_timestamp::Timestamp;
+use crate::errors::WeatherError;
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use geojson::Feature;
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
-use strum::{Display, EnumMessage, EnumProperty, EnumString, EnumVariantNames};
-// use uom::si::f32::*;
-// use uom::si::ratio::ratio;
-// use uom::si::thermodynamic_temperature::degree_fahrenheit;
+use strum::{Display, EnumMessage, EnumString, EnumVariantNames};
 use utoipa::ToSchema;
+
+#[async_trait]
+pub trait AggregateState {
+    type State;
+
+    type Command;
+    type Event: cqrs_es::DomainEvent;
+    type Error: std::error::Error;
+    type Services: Send + Sync;
+
+    async fn handle(
+        &self, command: Self::Command, services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error>;
+
+    fn apply(&self, event: Self::Event) -> Option<Self::State>;
+}
 
 #[derive(
     Debug,
@@ -170,29 +188,85 @@ impl Ord for QualityControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, ToSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WeatherFrame {
-    pub timestamp: Timestamp,
-    pub temperature: Option<QuantitativeValue>,
-    // pub dewpoint: Option<QuantitativeValue>,
-    // pub wind_direction: Option<QuantitativeValue>,
-    // pub wind_speed: Option<QuantitativeValue>,
-    // pub wind_gust: Option<QuantitativeValue>,
-    // pub barometric_pressure: Option<QuantitativeValue>,
-    // pub sea_level_pressure: Option<QuantitativeValue>,
-    // pub visibility: Option<QuantitativeValue>,
-    // pub max_temperature_last_24_hours: Option<QuantitativeValue>,
-    // pub min_temperature_last_24_hours: Option<QuantitativeValue>,
-    // pub precipitation_last_hour: Option<QuantitativeValue>,
-    // pub precipitation_last_3_hours: Option<QuantitativeValue>,
-    // pub precipitation_last_6_hours: Option<QuantitativeValue>,
-    // pub relative_humidity: Option<QuantitativeValue>,
-    // pub wind_chill: Option<QuantitativeValue>,
-    // pub heat_index: Option<QuantitativeValue>,
+#[derive(Debug, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
+pub struct ZoneForecast {
+    // #[serde(deserialize_with = "ZoneForecast::deserialize_zone_from_url")]
+    pub zone: String,
+
+    pub updated: DateTime<Utc>,
+
+    pub periods: Vec<ForecastDetail>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, ToSchema, Serialize, Deserialize)]
+impl ZoneForecast {
+    // pub fn deserialize_zone_from_url<'de, D>(deserializer: D) -> String
+    //     where
+    //         D: serde::Deserializer<'de>,
+    // {
+    //     let zone_url = String::deserialize(deserializer)?;
+    //     let split_url: Vec<_> = zone_url.split('/').collect();
+    //     split_url[split_url.len() - 1].to_string()
+    // }
+}
+
+impl TryFrom<Feature> for ZoneForecast {
+    type Error = WeatherError;
+
+    fn try_from(feature: Feature) -> Result<Self, Self::Error> {
+        let zone = feature
+            .property("zone")
+            .and_then(|p| p.as_str())
+            .ok_or_else(|| Self::Error::MissingFeature("zone".to_string()))?
+            .to_string();
+
+        let updated = Utc::now();
+
+        let periods: Vec<Result<ForecastDetail, Self::Error>> = feature
+            .property("periods")
+            .and_then(|p| p.as_array())
+            .cloned()
+            .map(|ps| {
+                ps.into_iter()
+                    .map(|detail| serde_json::from_value(detail).map_err(|err| err.into()))
+                    .collect()
+            })
+            .ok_or_else(|| Self::Error::MissingFeature("periods".to_string()))?;
+
+        // let periods: Vec<Result<Self, Self::Error>> = feature
+        //     .property("periods").ok_or_else(|| Self::Error::MissingFeature("periods".to_string()))?
+        //     .as_array().ok_or_else(|| Self::Error::MissingFeature("periods".to_string()))?
+        //     .clone()
+        //     .into_iter()
+        //     .map(|detail| serde_json::from_value(detail).map_err(|err| err.into()))
+        //     .collect();
+        let periods: Vec<ForecastDetail> =
+            periods
+                .into_iter()
+                .fold(Ok(Vec::with_capacity(periods.len())), |acc, res| {
+                    match (acc, res) {
+                        (Ok(mut acc0), Ok(p)) => {
+                            acc0.push(p);
+                            Ok(acc0)
+                        },
+                        (Ok(_), Err(err)) => Err(err),
+                        (Err(err), _) => Err(err),
+                    }
+                })?;
+
+        Ok(Self { zone, updated, periods })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ToSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForecastDetail {
+    pub name: String,
+
+    #[serde(alias = "detailedForecast")]
+    pub forecast: String,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, ToSchema, Serialize, Deserialize)]
 #[schema(example = json!("360.0"))]
 #[serde(transparent)]
 #[repr(transparent)]

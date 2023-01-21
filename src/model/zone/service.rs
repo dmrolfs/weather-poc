@@ -1,32 +1,25 @@
 mod app;
 mod happy;
-mod model;
 
 pub use app::AppLocationServices;
 pub use happy::HappyPathLocationServices;
 
-use crate::model::{LocationZoneCode, WeatherFrame};
+use crate::errors::WeatherError;
+use crate::model::{LocationZoneCode, WeatherFrame, ZoneForecast};
 use async_trait::async_trait;
 use reqwest::header::{HeaderMap, USER_AGENT};
-use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use thiserror::Error;
 use url::Url;
-use utoipa::ToSchema;
-
-#[derive(Debug, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
-#[serde(transparent)]
-#[repr(transparent)]
-pub struct ZoneForecast(String);
 
 #[async_trait]
 pub trait WeatherApi: Sync + Send {
     async fn zone_observations(
         &self, zone: &LocationZoneCode,
-    ) -> Result<WeatherFrame, WeatherApiError>;
+    ) -> Result<WeatherFrame, LocationServiceError>;
 
-    async fn zone_forecast(&self, zone: &LocationZoneCode)
-        -> Result<ZoneForecast, WeatherApiError>;
+    async fn zone_forecast(
+        &self, zone: &LocationZoneCode,
+    ) -> Result<ZoneForecast, LocationServiceError>;
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +32,7 @@ pub enum LocationServices {
 impl WeatherApi for LocationServices {
     async fn zone_observations(
         &self, zone: &LocationZoneCode,
-    ) -> Result<WeatherFrame, WeatherApiError> {
+    ) -> Result<WeatherFrame, LocationServiceError> {
         match self {
             Self::App(svc) => svc.zone_observations(zone).await,
             Self::HappyPath(svc) => svc.zone_observations(zone).await,
@@ -48,7 +41,7 @@ impl WeatherApi for LocationServices {
 
     async fn zone_forecast(
         &self, zone: &LocationZoneCode,
-    ) -> Result<ZoneForecast, WeatherApiError> {
+    ) -> Result<ZoneForecast, LocationServiceError> {
         match self {
             Self::App(svc) => svc.zone_forecast(zone).await,
             Self::HappyPath(svc) => svc.zone_forecast(zone).await,
@@ -57,4 +50,21 @@ impl WeatherApi for LocationServices {
 }
 
 #[derive(Debug, Error)]
-pub struct WeatherApiError;
+pub enum LocationServiceError {
+    #[error("supplied Weather API url is not a base url to query: {0}")]
+    NotABaseUrl(Url),
+
+    #[error("Weather API call failed: {0}")]
+    HttpRequest(#[from] reqwest::Error),
+
+    #[error("error occurred in HTTP middleware calling Weather API: {0}")]
+    HttpMiddleware(#[from] reqwest_middleware::Error),
+
+    #[error("failed to parse Weather API GeoJson response: {0}")]
+    GeoJson(#[from] geojson::Error),
+
+    #[error("{0}")]
+    Weather(#[from] WeatherError),
+    // #[error("failed to parse Weather API JSON response: {0}")]
+    // Json(#[from] serde_json::Error),
+}

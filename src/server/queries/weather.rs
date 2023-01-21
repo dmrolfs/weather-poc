@@ -1,4 +1,4 @@
-use crate::model::{QuantitativeValue, WeatherFrame};
+use crate::model::{LocationZone, QuantitativeValue, WeatherFrame};
 use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, View};
 use iso8601_timestamp::Timestamp;
@@ -94,7 +94,7 @@ impl From<WeatherFrame> for WeatherView {
     fn from(value: WeatherFrame) -> Self {
         Self {
             timestamp: value.timestamp,
-            temperature: Some(value.temperature),
+            temperature: value.temperature,
             ..Default::default() // dewpoint: Some(value.dewpoint),
                                  // wind_direction: Some(value.wind_direction),
                                  // wind_speed: Some(value.wind_speed),

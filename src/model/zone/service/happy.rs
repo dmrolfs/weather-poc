@@ -1,4 +1,4 @@
-use super::{WeatherApi, WeatherApiError, ZoneForecast};
+use super::{LocationServiceError, WeatherApi, ZoneForecast};
 use crate::model::{LocationZoneCode, WeatherFrame};
 use async_trait::async_trait;
 
@@ -9,13 +9,13 @@ pub struct HappyPathLocationServices;
 impl WeatherApi for HappyPathLocationServices {
     async fn zone_observations(
         &self, zone: &LocationZoneCode,
-    ) -> Result<WeatherFrame, WeatherApiError> {
+    ) -> Result<WeatherFrame, LocationServiceError> {
         todo!()
     }
 
     async fn zone_forecast(
         &self, zone: &LocationZoneCode,
-    ) -> Result<ZoneForecast, WeatherApiError> {
+    ) -> Result<ZoneForecast, LocationServiceError> {
         todo!()
     }
 }

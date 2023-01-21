@@ -27,7 +27,7 @@ impl<T: IntoResponse> From<Option<T>> for OptionalResult<T> {
     }
 }
 
-impl IntoResponse for BankError {
+impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let http_error = HttpError::from_error(self.into());
         http_error.into_response()
@@ -65,7 +65,16 @@ pub enum HttpError {
 impl HttpError {
     fn from_error(error: anyhow::Error) -> Self {
         tracing::error!("HTTP handler error: {error}");
-        match error.downcast_ref::<BankError>() {
+        match error.downcast_ref::<ApiError>() {
+            Some(ApiError::Path(_)) => Self::BadRequest { error: error.into() },
+            Some(
+                ApiError::IO(_)
+                | ApiError::Json(_)
+                | ApiError::HttpEngine(_)
+                | ApiError::Sql(_)
+                | ApiError::Join(_),
+            ) => Self::Internal { error: error.into() },
+
             // Some(BankError::BankAccount(BankAccountError::NotFound(account_id))) => {
             //     Self::NotFound {
             //         message: format!("No bank account found for account id: {account_id}").into(),

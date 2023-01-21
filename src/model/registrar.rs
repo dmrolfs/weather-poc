@@ -67,7 +67,6 @@ mod service {
     use crate::model::registrar::RegistrarEvent;
     use crate::model::{Location, LocationZoneCode};
     use async_trait::async_trait;
-    use chrono::format::Item;
 
     #[async_trait]
     pub trait RegistrarApi: Sync + Send {
@@ -155,8 +154,9 @@ mod protocol {
 
 mod errors {
     use std::fmt;
+    use thiserror::Error;
 
-    #[derive(Debug)]
+    #[derive(Debug, Error)]
     pub struct RegistrarError;
 
     impl fmt::Display for RegistrarError {
@@ -165,5 +165,5 @@ mod errors {
         }
     }
 
-    impl std::error::Error for RegistrarError {}
+    // impl std::error::Error for RegistrarError {}
 }
