@@ -1,14 +1,14 @@
-use crate::model::{LocationZoneCode, WeatherFrame, ZoneForecast};
+use crate::model::{LocationZoneIdentifier, WeatherAlert, WeatherFrame, ZoneForecast};
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LocationZoneCommand {
-    WatchZone(LocationZoneCode),
+    WatchZone(LocationZoneIdentifier),
     Observe,
     Forecast,
-    NoteAlertStatus(bool),
+    NoteAlert(Option<WeatherAlert>),
 }
 
 const VERSION: &str = "1.0";
@@ -16,10 +16,10 @@ const VERSION: &str = "1.0";
 #[derive(Debug, Display, Clone, PartialEq, Serialize, Deserialize)]
 #[strum(serialize_all = "snake_case")]
 pub enum LocationZoneEvent {
-    ZoneSet(LocationZoneCode),
+    ZoneSet(LocationZoneIdentifier),
     ObservationAdded(WeatherFrame),
     ForecastUpdated(ZoneForecast),
-    AlertActivated,
+    AlertActivated(WeatherAlert),
     AlertDeactivated,
 }
 

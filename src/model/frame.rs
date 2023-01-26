@@ -15,6 +15,8 @@ use utoipa::ToSchema;
 #[serde(rename_all = "camelCase")]
 pub struct WeatherFrame {
     pub timestamp: Timestamp,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<QuantitativeValue>,
     // pub dewpoint: Option<QuantitativeValue>,
     // pub wind_direction: Option<QuantitativeValue>,
@@ -85,7 +87,7 @@ fn fold_feature(mut acc: PropertyAggregations, feature: Feature) -> PropertyAggr
                 Ok(detail) => {
                     acc.properties
                         .entry(q_prop)
-                        .and_modify(|prop_agg| prop_agg.add_detail(detail))
+                        .and_modify(|prop_agg| prop_agg.add_detail(detail.clone()))
                         .or_insert(QuantitativeAggregation::new(detail));
                 },
                 Err(err) => {
@@ -134,7 +136,7 @@ pub enum QuantitativeProperty {
     // HeatIndex,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PropertyDetail {
     value: f32,

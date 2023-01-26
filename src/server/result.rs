@@ -68,10 +68,13 @@ impl HttpError {
         match error.downcast_ref::<ApiError>() {
             Some(ApiError::Path(_)) => Self::BadRequest { error: error.into() },
             Some(
-                ApiError::IO(_)
+                ApiError::ParseUrl(_)
+                | ApiError::NOAA(_)
+                | ApiError::IO(_)
                 | ApiError::Json(_)
                 | ApiError::HttpEngine(_)
                 | ApiError::Sql(_)
+                | ApiError::Database { .. }
                 | ApiError::Join(_),
             ) => Self::Internal { error: error.into() },
 

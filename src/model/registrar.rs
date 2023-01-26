@@ -1,9 +1,9 @@
 pub use errors::RegistrarError;
 pub use protocol::{RegistrarCommand, RegistrarEvent};
-pub use service::{HappyPathServices, RegistrarServices};
+pub use service::{HappyPathServices, RegistrarServices, StartUpdateLocationsServices};
 
 use super::Location;
-use crate::model::LocationZoneCode;
+use crate::model::LocationZoneIdentifier;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use postgres_es::PostgresCqrs;
@@ -24,7 +24,7 @@ pub fn generate_id() -> Id<Registrar> {
 
 #[derive(Debug, Default, Clone, Label, PartialEq, Serialize, Deserialize)]
 pub struct Registrar {
-    location_codes: HashMap<Location, LocationZoneCode>,
+    location_codes: HashMap<Location, LocationZoneIdentifier>,
 }
 
 #[async_trait]
@@ -63,46 +63,78 @@ impl Aggregate for Registrar {
 }
 
 mod service {
+    use std::fmt;
     use super::RegistrarError;
     use crate::model::registrar::RegistrarEvent;
-    use crate::model::{Location, LocationZoneCode};
+    use crate::model::update::UpdateLocationsCommand;
+    use crate::model::{Location, LocationZoneIdentifier, UpdateLocationsSaga};
     use async_trait::async_trait;
 
     #[async_trait]
     pub trait RegistrarApi: Sync + Send {
         async fn update_weather(
-            &self, zones: &[(&Location, &LocationZoneCode)],
+            &self, zones: &[(&Location, &LocationZoneIdentifier)],
         ) -> Result<Vec<RegistrarEvent>, RegistrarError>;
     }
 
     #[derive(Debug, Clone)]
     pub enum RegistrarServices {
-        // AggregatePath(AggregatePathRegistrarServices),
+        Saga(StartUpdateLocationsServices),
         HappyPath(HappyPathServices),
     }
 
     #[async_trait]
     impl RegistrarApi for RegistrarServices {
         async fn update_weather(
-            &self, zones: &[(&Location, &LocationZoneCode)],
+            &self, zones: &[(&Location, &LocationZoneIdentifier)],
         ) -> Result<Vec<RegistrarEvent>, RegistrarError> {
             match self {
-                // Self::AggregatePath(svc) => svc.update_weather(zones).await,
+                Self::Saga(svc) => svc.update_weather(zones).await,
                 Self::HappyPath(svc) => svc.update_weather(zones).await,
             }
         }
     }
 
-    // #[derive(Debug, Copy, Clone)]
-    // pub struct AggregatePathRegistrarServices;
-    //
-    // #[async_trait]
-    // impl RegistrarApi for AggregatePathRegistrarServices {
-    //     async fn update_weather(&self, zones: &[LocationZone]) -> Result<Vec<RegistrarEvent>, RegistrarServiceError> {
-    //         let aggregate_id = update_weather::generate_id();
-    //         todo!()
-    //     }
-    // }
+    #[derive(Clone)]
+    pub struct StartUpdateLocationsServices(UpdateLocationsSaga);
+
+    impl StartUpdateLocationsServices {
+        pub fn new(saga: UpdateLocationsSaga) -> Self {
+            Self(saga)
+        }
+    }
+
+    impl fmt::Debug for StartUpdateLocationsServices {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("StartUpdateLocationsService").finish()
+        }
+    }
+
+    #[async_trait]
+    impl RegistrarApi for StartUpdateLocationsServices {
+        async fn update_weather(
+            &self, zones: &[(&Location, &LocationZoneIdentifier)],
+        ) -> Result<Vec<RegistrarEvent>, RegistrarError> {
+            let mut zone_ids = Vec::with_capacity(zones.len());
+            let mut events = Vec::with_capacity(zones.len());
+            for (location, zone_id) in zones {
+                let location = location.clone();
+                let zone_id = zone_id.clone();
+                events.push(RegistrarEvent::LocationAdded(
+                    location.clone(),
+                    zone_id.clone(),
+                ));
+                zone_ids.push(zone_id.clone());
+            }
+
+            let saga_id = crate::model::update::generate_id();
+            let metadata =
+                maplit::hashmap! { "correlation".to_string() => saga_id.pretty().to_string(), };
+            let command = UpdateLocationsCommand::UpdateLocations(zone_ids);
+            self.0.execute_with_metadata(saga_id.pretty(), command, metadata).await?;
+            Ok(events)
+        }
+    }
 
     #[derive(Debug, Copy, Clone)]
     pub struct HappyPathServices;
@@ -110,7 +142,7 @@ mod service {
     #[async_trait]
     impl RegistrarApi for HappyPathServices {
         async fn update_weather(
-            &self, zones: &[(&Location, &LocationZoneCode)],
+            &self, zones: &[(&Location, &LocationZoneIdentifier)],
         ) -> Result<Vec<RegistrarEvent>, RegistrarError> {
             let events = zones
                 .iter()
@@ -122,7 +154,7 @@ mod service {
 }
 
 mod protocol {
-    use crate::model::{Location, LocationZoneCode};
+    use crate::model::{Location, LocationZoneIdentifier};
     use cqrs_es::DomainEvent;
     use serde::{Deserialize, Serialize};
     use strum::Display;
@@ -130,7 +162,7 @@ mod protocol {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub enum RegistrarCommand {
         UpdateWeather,
-        MonitorLocation(Location, LocationZoneCode),
+        MonitorLocation(Location, LocationZoneIdentifier),
     }
 
     const VERSION: &str = "1.0";
@@ -138,7 +170,7 @@ mod protocol {
     #[derive(Debug, Display, Clone, PartialEq, Eq, Serialize, Deserialize)]
     #[strum(serialize_all = "snake_case")]
     pub enum RegistrarEvent {
-        LocationAdded(Location, LocationZoneCode),
+        LocationAdded(Location, LocationZoneIdentifier),
     }
 
     impl DomainEvent for RegistrarEvent {
@@ -153,17 +185,12 @@ mod protocol {
 }
 
 mod errors {
-    use std::fmt;
     use thiserror::Error;
+    use crate::model::update::UpdateLocationsError;
 
     #[derive(Debug, Error)]
-    pub struct RegistrarError;
-
-    impl fmt::Display for RegistrarError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", "RegistrarError")
-        }
+    pub enum RegistrarError {
+        #[error("{0}")]
+        UpdateLocations(#[from] cqrs_es::AggregateError<UpdateLocationsError>),
     }
-
-    // impl std::error::Error for RegistrarError {}
 }

@@ -5,4 +5,4 @@ mod service;
 
 pub use location::{generate_id, LocationZone, LocationZoneAggregate};
 pub use protocol::{LocationZoneCommand, LocationZoneEvent};
-pub use service::{HappyPathLocationServices, LocationServices};
+pub use service::LocationServices;

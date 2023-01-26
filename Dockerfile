@@ -15,7 +15,7 @@ COPY . .
 ENV SQLX_OFFLINE true
 
 # Build our project
-RUN cargo build --release --bin weather
+RUN cargo build --release --bin services
 
 FROM debian:buster-slim AS runtime
 WORKDIR /app

@@ -1,37 +1,51 @@
 use super::errors::ApiError;
 use crate::model::registrar::{self, Registrar, RegistrarAggregate, RegistrarServices};
-use crate::model::zone::{self, LocationServices, LocationZone, LocationZoneAggregate};
+use crate::model::update::UpdateLocationsServices;
+use crate::model::zone::{LocationServices, LocationZone, LocationZoneAggregate};
+use crate::model::{UpdateLocations, UpdateLocationsSaga};
 use crate::server::queries::{TracingQuery, WeatherQuery, WeatherViewProjection};
+use crate::services::noaa::{NoaaWeatherApi, NoaaWeatherServices};
 use axum::extract::FromRef;
 use cqrs_es::Query;
 use postgres_es::PostgresViewRepository;
 use sqlx::PgPool;
 use std::fmt;
 use std::sync::Arc;
+use url::Url;
+use std::str::FromStr;
 
 pub const WEATHER_QUERY_VIEW: &str = "weather_query";
 pub const VIEW_PAYLOAD: &str = "payload";
 
 #[tracing::instrument(level = "trace")]
-pub async fn initialize_api_state(db_pool: PgPool) -> Result<AppState, ApiError> {
-    // -- Registrar aggregate --
-    let registrar_tracing_query = TracingQuery::<Registrar>::default();
-    let registrar_queries: Vec<Box<dyn Query<Registrar>>> = vec![Box::new(registrar_tracing_query)];
-    let registrar_services = RegistrarServices::HappyPath(registrar::HappyPathServices);
-    let registrar_agg = Arc::new(postgres_es::postgres_cqrs(
-        db_pool.clone(),
-        registrar_queries,
-        registrar_services,
-    ));
+pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError> {
+    let user_agent = axum::http::HeaderValue::from_str("(here.com, contact@example.com)")
+        .expect("invalid user_agent");
+    let base_url = Url::from_str("https://api.weather.gov")?;
+    let noaa_api = NoaaWeatherApi::new(base_url, user_agent)?;
+    let noaa = NoaaWeatherServices::NOAA(noaa_api);
 
     // -- UpdateLocationsSaga aggregate --
     let update_locations_tracing_query = TracingQuery::<UpdateLocations>::default();
-    let update_locations_queries: Vec<Box<dyn Query<UpdateLocationsSaga>>> =
+    let update_locations_queries: Vec<Box<dyn Query<UpdateLocations>>> =
         vec![Box::new(update_locations_tracing_query)];
+    let update_locations_services = UpdateLocationsServices::new(noaa.clone());
     let update_locations_agg = Arc::new(postgres_es::postgres_cqrs(
         db_pool.clone(),
         update_locations_queries,
         update_locations_services,
+    ));
+
+    // -- Registrar aggregate --
+    let registrar_tracing_query = TracingQuery::<Registrar>::default();
+    let registrar_queries: Vec<Box<dyn Query<Registrar>>> = vec![Box::new(registrar_tracing_query)];
+    let registrar_services = RegistrarServices::Saga(registrar::StartUpdateLocationsServices::new(
+        update_locations_agg.clone(),
+    ));
+    let registrar_agg = Arc::new(postgres_es::postgres_cqrs(
+        db_pool.clone(),
+        registrar_queries,
+        registrar_services,
     ));
 
     // -- LocationZone aggregate --
@@ -42,14 +56,14 @@ pub async fn initialize_api_state(db_pool: PgPool) -> Result<AppState, ApiError>
     ));
     let mut weather_query = WeatherQuery::new(weather_view.clone());
     weather_query.use_error_handler(Box::new(
-        |err| tracing::error!(error=?err, "weather query failed"),
+        |err| tracing::error!(error=?err, "services query failed"),
     ));
 
     let location_queries: Vec<Box<dyn Query<LocationZone>>> = vec![
         Box::new(location_zone_tracing_query),
         Box::new(weather_query),
     ];
-    let location_services = LocationServices::HappyPath(zone::HappyPathLocationServices);
+    let location_services = LocationServices::new(noaa.clone());
     let location_agg = Arc::new(postgres_es::postgres_cqrs(
         db_pool.clone(),
         location_queries,

@@ -27,5 +27,5 @@ run:
 
 #build-docker:
 #  cargo test
-#  docker build --tag weather --file Dockerfile
+#  docker build --tag services --file Dockerfile
 

@@ -4,5 +4,9 @@
 mod errors;
 mod model;
 mod server;
+mod services;
 mod settings;
 pub mod tracing;
+
+pub use settings::{CliOptions, Settings};
+pub use server::Server;
