@@ -1,7 +1,9 @@
 use crate::model::zone::errors::LocationZoneError;
 use crate::model::zone::service::LocationServices;
 use crate::model::zone::{LocationZoneCommand, LocationZoneEvent};
-use crate::model::{AggregateState, LocationZoneIdentifier, WeatherFrame, ZoneForecast};
+use crate::model::{
+    AggregateState, LocationZoneCode, LocationZoneType, WeatherFrame, ZoneForecast,
+};
 use crate::services::noaa::ZoneWeatherApi;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -97,26 +99,33 @@ impl AggregateState for QuiescentLocationZone {
     type Error = <LocationZone as Aggregate>::Error;
     type Services = <LocationZone as Aggregate>::Services;
 
+    #[tracing::instrument(level = "trace")]
     async fn handle(
         &self, command: Self::Command, _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            Self::Command::WatchZone(zone) => Ok(vec![Self::Event::ZoneSet(zone)]),
+            LocationZoneCommand::WatchZone(zone_type, zone_code) => {
+                Ok(vec![LocationZoneEvent::ZoneSet(zone_type, zone_code)])
+            },
 
-            cmd => Err(Self::Error::RejectedCommand(format!(
+            cmd => Err(LocationZoneError::RejectedCommand(format!(
                 "LocationZone cannot handle command until it targets a zone: {cmd:?}"
             ))),
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     fn apply(&self, event: Self::Event) -> Option<Self::State> {
         match event {
-            Self::Event::ZoneSet(zone_code) => Some(Self::State::Active(ActiveLocationZone {
-                zone_id: zone_code,
-                weather: None,
-                forecast: None,
-                active_alert: false,
-            })),
+            LocationZoneEvent::ZoneSet(zone_type, zone_code) => {
+                Some(Self::State::Active(ActiveLocationZone {
+                    zone_type,
+                    zone_id: zone_code,
+                    weather: None,
+                    forecast: None,
+                    active_alert: false,
+                }))
+            },
 
             event => {
                 tracing::warn!(?event, "invalid quiescent location zone event -- ignored");
@@ -128,7 +137,8 @@ impl AggregateState for QuiescentLocationZone {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct ActiveLocationZone {
-    pub zone_id: LocationZoneIdentifier,
+    pub zone_type: LocationZoneType,
+    pub zone_id: LocationZoneCode,
     pub weather: Option<WeatherFrame>,
     pub forecast: Option<ZoneForecast>,
     pub active_alert: bool,
@@ -142,54 +152,57 @@ impl AggregateState for ActiveLocationZone {
     type Error = <LocationZone as Aggregate>::Error;
     type Services = <LocationZone as Aggregate>::Services;
 
+    #[tracing::instrument(level = "trace")]
     async fn handle(
         &self, command: Self::Command, services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            Self::Command::Observe => {
+            LocationZoneCommand::Observe => {
                 let frame = services.zone_observation(&self.zone_id).await?;
-                Ok(vec![Self::Event::ObservationAdded(frame)])
+                Ok(vec![LocationZoneEvent::ObservationAdded(frame)])
             },
 
-            Self::Command::Forecast => {
-                let forecast = services.zone_forecast(&self.zone_id).await?;
-                Ok(vec![Self::Event::ForecastUpdated(forecast)])
+            LocationZoneCommand::Forecast => {
+                let forecast = services.zone_forecast(self.zone_type, &self.zone_id).await?;
+                Ok(vec![LocationZoneEvent::ForecastUpdated(forecast)])
             },
 
-            Self::Command::NoteAlert(alert) => {
+            LocationZoneCommand::NoteAlert(alert) => {
                 let event = match (self.active_alert, alert) {
-                    (false, Some(alert)) => Some(Self::Event::AlertActivated(alert)),
-                    (true, None) => Some(Self::Event::AlertDeactivated),
+                    (false, Some(alert)) => Some(LocationZoneEvent::AlertActivated(alert)),
+                    (true, None) => Some(LocationZoneEvent::AlertDeactivated),
                     _ => None,
                 };
 
                 Ok(event.into_iter().collect())
             },
 
-            Self::Command::WatchZone(new_zone) => Err(Self::Error::RejectedCommand(format!(
-                "LocationZone already watching zone, {}, cannot change to watch: {new_zone}", self.zone_id
+            LocationZoneCommand::WatchZone(new_zone_type, new_zone_code) => Err(LocationZoneError::RejectedCommand(format!(
+                "LocationZone already watching zone, {}, cannot change to watch: {new_zone_type}/{new_zone_code}",
+                self.zone_id
             ))),
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     fn apply(&self, event: Self::Event) -> Option<Self::State> {
         match event {
-            Self::Event::ObservationAdded(frame) => Some(Self::State::Active(Self {
+            LocationZoneEvent::ObservationAdded(frame) => Some(LocationZoneState::Active(Self {
                 weather: Some(frame),
                 ..self.clone()
             })),
 
-            Self::Event::ForecastUpdated(forecast) => Some(Self::State::Active(Self {
+            LocationZoneEvent::ForecastUpdated(forecast) => Some(LocationZoneState::Active(Self {
                 forecast: Some(forecast),
                 ..self.clone()
             })),
 
-            Self::Event::AlertActivated(_) => Some(Self::State::Active(Self {
+            LocationZoneEvent::AlertActivated(_) => Some(LocationZoneState::Active(Self {
                 active_alert: true,
                 ..self.clone()
             })),
 
-            Self::Event::AlertDeactivated => Some(Self::State::Active(Self {
+            LocationZoneEvent::AlertDeactivated => Some(LocationZoneState::Active(Self {
                 active_alert: false,
                 ..self.clone()
             })),

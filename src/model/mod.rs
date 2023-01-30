@@ -16,10 +16,10 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
-use strum::{Display, EnumMessage, EnumString, EnumVariantNames, IntoStaticStr};
+use std::str::FromStr;
+use strum_macros::{Display, EnumMessage, EnumString, EnumVariantNames, IntoStaticStr};
 use url::Url;
 use utoipa::ToSchema;
-use std::str::FromStr;
 
 pub fn transpose_result<T, E>(
     results: impl IntoIterator<Item = Result<T, E>>,
@@ -70,38 +70,49 @@ pub enum Location {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ToSchema, Serialize, Deserialize)]
-pub struct LocationZoneIdentifier {
-    pub zone_type: LocationZoneType,
-    pub code: String,
-}
+#[repr(transparent)]
+#[serde(transparent)]
+pub struct LocationZoneCode(String);
 
-impl std::fmt::Display for LocationZoneIdentifier {
+impl std::fmt::Display for LocationZoneCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", self.zone_type, self.code)
+        write!(f, "{}", self.0)
     }
 }
 
-impl LocationZoneIdentifier {
-    pub fn new(zone_type: LocationZoneType, code: impl Into<String>) -> Self {
-        Self { zone_type, code: code.into() }
+impl LocationZoneCode {
+    pub fn new(code: impl Into<String>) -> Self {
+        Self(code.into())
     }
 
-    pub fn from_url(url: impl Into<Url>) -> Result<Self, WeatherError> {
+    pub fn from_url(url: impl Into<Url>) -> Result<(Option<LocationZoneType>, Self), WeatherError> {
         let url = url.into();
-        url.path_segments().and_then(|segments| {
-            let segments: Vec<_> = segments.collect();
-            let nr_segments = segments.len();
+        url.path_segments()
+            .and_then(|segments| {
+                let segments: Vec<_> = segments.collect();
+                let nr_segments = segments.len();
 
-            if nr_segments < 2 {
-                None
-            } else {
-                let zone_code = segments[nr_segments - 1].to_string();
-                LocationZoneType::from_str(segments[nr_segments - 2])
-                    .ok()
-                    .map(|zone_type| Self::new(zone_type, zone_code))
-            }
-        })
+                if nr_segments < 2 {
+                    None
+                } else {
+                    let zone_code = LocationZoneCode::new(segments[nr_segments - 1]);
+                    let zone_type = LocationZoneType::from_str(segments[nr_segments - 2]).ok();
+                    Some((zone_type, zone_code))
+                }
+            })
             .ok_or_else(|| WeatherError::UrlNotZoneIdentifier(url))
+    }
+}
+
+impl From<LocationZoneCode> for String {
+    fn from(code: LocationZoneCode) -> Self {
+        code.0
+    }
+}
+
+impl AsRef<str> for LocationZoneCode {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
     }
 }
 
@@ -126,39 +137,39 @@ pub enum LocationZoneType {
     Forecast,
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    EnumString,
-    EnumVariantNames,
-    ToSchema,
-    Serialize,
-    Deserialize,
-)]
-#[strum(serialize_all = "PascalCase", ascii_case_insensitive)]
-pub enum ZoneUpdateStatus {
-    Started,
-    Succeeded,
-    Failed,
-}
+// #[derive(
+//     Debug,
+//     Copy,
+//     Clone,
+//     PartialEq,
+//     Eq,
+//     Hash,
+//     Display,
+//     EnumString,
+//     EnumVariantNames,
+//     ToSchema,
+//     Serialize,
+//     Deserialize,
+// )]
+// #[strum(serialize_all = "PascalCase", ascii_case_insensitive)]
+// pub enum ZoneUpdateStatus {
+//     Started,
+//     Observation,
+//     Forecast,
+//     Alert,
+//     Succeeded,
+//     Failed,
+// }
 
-impl ZoneUpdateStatus {
-    pub const fn is_active(&self) -> bool {
-        match self {
-            Self::Started => true,
-            Self::Succeeded | Self::Failed => false,
-        }
-    }
-
-    pub const fn is_complete(&self) -> bool {
-        !self.is_active()
-    }
-}
+// impl ZoneUpdateStatus {
+//     pub const fn is_active(&self) -> bool {
+//         matches!(self, Self::Succeeded | Self::Failed)
+//     }
+//
+//     pub const fn is_complete(&self) -> bool {
+//         !self.is_active()
+//     }
+// }
 
 #[derive(Debug, PartialEq, Clone, ToSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -320,18 +331,16 @@ impl TryFrom<Feature> for ZoneForecast {
         //     .collect();
         let nr_periods = periods.len();
         let periods: Vec<ForecastDetail> =
-            periods
-                .into_iter()
-                .fold(Ok(Vec::with_capacity(nr_periods)), |acc, res| {
-                    match (acc, res) {
-                        (Ok(mut acc0), Ok(p)) => {
-                            acc0.push(p);
-                            Ok(acc0)
-                        },
-                        (Ok(_), Err(err)) => Err(err),
-                        (Err(err), _) => Err(err),
-                    }
-                })?;
+            periods.into_iter().fold(Ok(Vec::with_capacity(nr_periods)), |acc, res| {
+                match (acc, res) {
+                    (Ok(mut acc0), Ok(p)) => {
+                        acc0.push(p);
+                        Ok(acc0)
+                    },
+                    (Ok(_), Err(err)) => Err(err),
+                    (Err(err), _) => Err(err),
+                }
+            })?;
 
         Ok(Self { zone_code, updated, periods })
     }
@@ -349,7 +358,7 @@ pub struct ForecastDetail {
 #[derive(Debug, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WeatherAlert {
-    pub affected_zones: Vec<LocationZoneIdentifier>,
+    pub affected_zones: Vec<LocationZoneCode>,
     pub status: AlertStatus,
     pub message_type: AlertMessageType,
 
@@ -433,21 +442,20 @@ struct PropertyExtractor<'a> {
 
 impl<'a> PropertyExtractor<'a> {
     fn new(target: &'a str, feature: &'a Feature) -> Self {
-        Self { target, feature, }
+        Self { target, feature }
     }
 
     fn property<T: DeserializeOwned>(&self, property: &str) -> Result<T, WeatherError> {
-        let p = self.feature
-            .property(property)
-            .ok_or_else(|| WeatherError::MissingGeoJsonProperty {
+        let p = self.feature.property(property).ok_or_else(|| {
+            WeatherError::MissingGeoJsonProperty {
                 target: self.target.to_string(),
                 property: property.to_string(),
-            })?;
+            }
+        })?;
 
         Ok(serde_json::from_value(p.clone())?)
     }
 }
-
 
 #[derive(
     Debug,
@@ -509,8 +517,8 @@ pub enum AlertMessageType {
     Serialize,
     Deserialize,
 )]
-#[strum(serialize_all = "PascalCase", ascii_case_insensitive)]
-#[serde(rename_all = "PascalCase")]
+#[strum(ascii_case_insensitive)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum AlertCategory {
     Met,
     Geo,

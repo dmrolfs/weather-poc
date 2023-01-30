@@ -6,5 +6,5 @@ pub enum LocationZoneError {
     RejectedCommand(String),
 
     #[error("{0}")]
-    NOAA(#[from] crate::services::noaa::NoaaWeatherError),
+    Noaa(#[from] crate::services::noaa::NoaaWeatherError),
 }

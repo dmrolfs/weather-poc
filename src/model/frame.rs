@@ -6,9 +6,8 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::num::TryFromIntError;
-use strum::{
-    Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator, IntoStaticStr, VariantNames,
-};
+use strum::{IntoEnumIterator, VariantNames};
+use strum_macros::{Display, EnumIter, EnumString, EnumVariantNames, IntoStaticStr};
 use utoipa::ToSchema;
 
 #[derive(Debug, PartialEq, Clone, ToSchema, Serialize, Deserialize)]

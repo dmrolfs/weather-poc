@@ -1,6 +1,6 @@
 mod weather;
 
-pub use weather::{WeatherView, WeatherQuery, WeatherViewProjection};
+pub use weather::{WeatherQuery, WeatherView, WeatherViewProjection};
 
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, EventEnvelope, Query};

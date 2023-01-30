@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::json;
 use sql_query_builder as sql;
 use std::collections::HashMap;
-use strum::{Display, EnumString, EnumVariantNames};
+use strum_macros::{Display, EnumString, EnumVariantNames};
 use utoipa::{OpenApi, ToSchema};
 
 #[derive(OpenApi)]

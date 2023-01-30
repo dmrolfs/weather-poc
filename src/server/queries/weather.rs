@@ -1,3 +1,4 @@
+use crate::model::zone::LocationZoneEvent;
 use crate::model::{ForecastDetail, LocationZone, WeatherAlert, WeatherFrame};
 use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, View};
@@ -6,7 +7,6 @@ use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
-use crate::model::zone::LocationZoneEvent;
 
 pub type WeatherViewRepository = PostgresViewRepository<WeatherView, LocationZone>;
 pub type WeatherViewProjection = Arc<WeatherViewRepository>;
@@ -29,7 +29,6 @@ pub struct WeatherView {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub forecast: Vec<ForecastDetail>,
 }
-
 
 impl Default for WeatherView {
     fn default() -> Self {
@@ -59,15 +58,25 @@ impl View<LocationZone> for WeatherView {
         use LocationZoneEvent as Evt;
 
         match &event.payload {
-            Evt::ZoneSet(zone_id) => { self.zone_code = zone_id.code.clone(); },
+            Evt::ZoneSet(_zone_type, zone_id) => {
+                self.zone_code = zone_id.to_string();
+            },
 
-            Evt::ObservationAdded(frame) => { self.current = Some(frame.clone()); },
+            Evt::ObservationAdded(frame) => {
+                self.current = Some(frame.clone());
+            },
 
-            Evt::ForecastUpdated(forecast) => { self.forecast = forecast.periods.clone(); },
+            Evt::ForecastUpdated(forecast) => {
+                self.forecast = forecast.periods.clone();
+            },
 
-            Evt::AlertActivated(alert) => { self.alert = Some(alert.clone()); },
+            Evt::AlertActivated(alert) => {
+                self.alert = Some(alert.clone());
+            },
 
-            Evt::AlertDeactivated => { self.alert = None; },
+            Evt::AlertDeactivated => {
+                self.alert = None;
+            },
         }
     }
 }

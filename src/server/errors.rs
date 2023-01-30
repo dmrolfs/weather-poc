@@ -1,3 +1,4 @@
+use crate::model::registrar::RegistrarError;
 use thiserror::Error;
 use utoipa::ToSchema;
 
@@ -7,7 +8,7 @@ pub enum ApiError {
     ParseUrl(#[from] url::ParseError),
 
     #[error("{0}")]
-    NOAA(#[from] crate::services::noaa::NoaaWeatherError),
+    Noaa(#[from] crate::services::noaa::NoaaWeatherError),
 
     #[error("Invalid URL path input: {0}")]
     Path(#[from] axum::extract::rejection::PathRejection),
@@ -18,11 +19,14 @@ pub enum ApiError {
     #[error("Invalid JSON payload: {0}")]
     Json(#[from] axum::extract::rejection::JsonRejection),
 
+    #[error("call to location registrar failed: {0}")]
+    Registrar(#[from] cqrs_es::AggregateError<RegistrarError>),
+
     #[error("HTTP engine error: {0}")]
     HttpEngine(#[from] hyper::Error),
 
     #[error("failure during attempted database query: {source}")]
-    Database { source: anyhow::Error, },
+    Database { source: anyhow::Error },
 
     #[error("failed database operation: {0} ")]
     Sql(#[from] sqlx::Error),
@@ -36,5 +40,3 @@ impl From<cqrs_es::persist::PersistenceError> for ApiError {
         Self::Database { source: error.into() }
     }
 }
-
-

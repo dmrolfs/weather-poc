@@ -1,13 +1,14 @@
 use super::state::AppState;
+use crate::model::registrar::RegistrarCommand;
 use crate::model::{registrar, RegistrarAggregate};
-use axum::extract::{Path, State};
-use axum::response::IntoResponse;
-use axum::{routing, Router, Json};
-use cqrs_es::persist::ViewRepository;
-use utoipa::OpenApi;
 use crate::server::errors::ApiError;
 use crate::server::queries::{WeatherView, WeatherViewProjection};
 use crate::server::result::OptionalResult;
+use axum::extract::{Path, State};
+use axum::response::IntoResponse;
+use axum::{routing, Json, Router};
+use cqrs_es::persist::ViewRepository;
+use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -41,7 +42,10 @@ pub fn api() -> Router<AppState> {
 #[tracing::instrument(level = "trace", skip(loc_registrar))]
 async fn update_weather(State(loc_registrar): State<RegistrarAggregate>) -> impl IntoResponse {
     let aggregate_id = registrar::generate_id();
-    todo!()
+    loc_registrar
+        .execute(aggregate_id.pretty(), RegistrarCommand::UpdateWeather)
+        .await
+        .map_err::<ApiError, _>(|err| err.into())
 }
 
 #[utoipa::path(
@@ -58,8 +62,10 @@ async fn update_weather(State(loc_registrar): State<RegistrarAggregate>) -> impl
     ),
 )]
 #[axum::debug_handler]
-#[tracing::instrument(level="debug", skip(view_repo))]
-async fn serve_location_weather(Path(zone_code): Path<String>, State(view_repo): State<WeatherViewProjection>) -> impl IntoResponse {
+#[tracing::instrument(level = "debug", skip(view_repo))]
+async fn serve_location_weather(
+    Path(zone_code): Path<String>, State(view_repo): State<WeatherViewProjection>,
+) -> impl IntoResponse {
     let view = view_repo
         .load(zone_code.as_str())
         .await

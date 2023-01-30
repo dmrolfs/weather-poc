@@ -1,20 +1,80 @@
-use crate::model::{UpdateLocations, WeatherAlert};
+use crate::model::{LocationZoneCode, WeatherAlert};
+use crate::queries::SubscribeCommand;
 use crate::services::noaa::{AlertApi, NoaaWeatherError, NoaaWeatherServices};
 use async_trait::async_trait;
-use pretty_snowflake::Id;
-use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{mpsc, RwLock};
 
 #[derive(Debug, Clone)]
-pub struct UpdateLocationsServices(NoaaWeatherServices);
+pub struct UpdateLocationsServices {
+    location_subscriber_tx: Arc<RwLock<Option<mpsc::Sender<SubscribeCommand>>>>,
+    noaa: NoaaWeatherServices,
+}
 
 impl UpdateLocationsServices {
-    pub fn new(noaa: NoaaWeatherServices) -> Self { Self(noaa) }
+    pub fn new(
+        location_subscriber_tx: mpsc::Sender<SubscribeCommand>, noaa: NoaaWeatherServices,
+    ) -> Self {
+        Self {
+            location_subscriber_tx: Arc::new(RwLock::new(Some(location_subscriber_tx))),
+            noaa,
+        }
+    }
+
+    pub fn for_noaa(noaa: NoaaWeatherServices) -> Self {
+        Self {
+            location_subscriber_tx: Arc::new(RwLock::new(None)),
+            noaa,
+        }
+    }
+
+    pub async fn with_subscriber_tx(&mut self, subscriber_tx: mpsc::Sender<SubscribeCommand>) {
+        *self.location_subscriber_tx.write().await = Some(subscriber_tx);
+    }
+
+    pub async fn add_subscriber(
+        &self, subscriber_id: impl Into<String>, zones: &[LocationZoneCode],
+    ) {
+        let subscriber_tx = self.location_subscriber_tx.read().await;
+        if let Some(ref tx) = *subscriber_tx {
+            let subscriber_id = subscriber_id.into();
+            let publisher_ids = zones.iter().map(|z| z.to_string()).collect();
+            let outcome = tx
+                .send(SubscribeCommand::Add {
+                    subscriber_id: subscriber_id.clone(),
+                    publisher_ids,
+                })
+                .await;
+            if let Err(error) = outcome {
+                tracing::error!(
+                    ?error,
+                    "location broadcast subscription failed for update saga: {subscriber_id}"
+                );
+            }
+        }
+    }
+
+    pub async fn remove_subscriber(&self, subscriber_id: impl Into<String>) {
+        let subscriber_tx = self.location_subscriber_tx.read().await;
+        if let Some(ref tx) = *subscriber_tx {
+            let subscriber_id = subscriber_id.into();
+            let outcome = tx
+                .send(SubscribeCommand::Remove { subscriber_id: subscriber_id.clone() })
+                .await;
+            if let Err(error) = outcome {
+                tracing::error!(
+                    ?error,
+                    "location broadcast subscirption failed for update saga: {subscriber_id}"
+                );
+            }
+        }
+    }
 }
 
 #[async_trait]
 impl AlertApi for UpdateLocationsServices {
     async fn active_alerts(&self) -> Result<Vec<WeatherAlert>, NoaaWeatherError> {
-        self.0.active_alerts().await
+        self.noaa.active_alerts().await
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::model::{LocationZoneIdentifier, WeatherFrame, ZoneForecast};
+use crate::model::{LocationZoneCode, LocationZoneType, WeatherFrame, ZoneForecast};
 use crate::services::noaa::{NoaaWeatherError, NoaaWeatherServices, ZoneWeatherApi};
 use async_trait::async_trait;
 
@@ -14,14 +14,14 @@ impl LocationServices {
 #[async_trait]
 impl ZoneWeatherApi for LocationServices {
     async fn zone_observation(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone_code: &LocationZoneCode,
     ) -> Result<WeatherFrame, NoaaWeatherError> {
-        self.0.zone_observation(zone).await
+        self.0.zone_observation(zone_code).await
     }
 
     async fn zone_forecast(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone_type: LocationZoneType, zone_code: &LocationZoneCode,
     ) -> Result<ZoneForecast, NoaaWeatherError> {
-        self.0.zone_forecast(zone).await
+        self.0.zone_forecast(zone_type, zone_code).await
     }
 }

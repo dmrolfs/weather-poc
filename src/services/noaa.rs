@@ -1,7 +1,7 @@
 use crate::errors::WeatherError;
 use crate::model;
 use crate::model::{
-    transpose_result, LocationZoneIdentifier, WeatherAlert, WeatherFrame, ZoneForecast,
+    transpose_result, LocationZoneCode, LocationZoneType, WeatherAlert, WeatherFrame, ZoneForecast,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -18,11 +18,11 @@ use url::Url;
 #[async_trait]
 pub trait ZoneWeatherApi: Send + Sync {
     async fn zone_observation(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone_code: &LocationZoneCode,
     ) -> Result<WeatherFrame, NoaaWeatherError>;
 
     async fn zone_forecast(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone_type: LocationZoneType, zone_code: &LocationZoneCode,
     ) -> Result<ZoneForecast, NoaaWeatherError>;
 }
 
@@ -33,27 +33,27 @@ pub trait AlertApi: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub enum NoaaWeatherServices {
-    NOAA(NoaaWeatherApi),
+    Noaa(NoaaWeatherApi),
     HappyPath(HappyPathWeatherServices),
 }
 
 #[async_trait]
 impl ZoneWeatherApi for NoaaWeatherServices {
     async fn zone_observation(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone_code: &LocationZoneCode,
     ) -> Result<WeatherFrame, NoaaWeatherError> {
         match self {
-            Self::NOAA(svc) => svc.zone_observation(zone).await,
-            Self::HappyPath(svc) => svc.zone_observation(zone).await,
+            Self::Noaa(svc) => svc.zone_observation(zone_code).await,
+            Self::HappyPath(svc) => svc.zone_observation(zone_code).await,
         }
     }
 
     async fn zone_forecast(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone_type: LocationZoneType, zone_code: &LocationZoneCode,
     ) -> Result<ZoneForecast, NoaaWeatherError> {
         match self {
-            Self::NOAA(svc) => svc.zone_forecast(zone).await,
-            Self::HappyPath(svc) => svc.zone_forecast(zone).await,
+            Self::Noaa(svc) => svc.zone_forecast(zone_type, zone_code).await,
+            Self::HappyPath(svc) => svc.zone_forecast(zone_type, zone_code).await,
         }
     }
 }
@@ -62,7 +62,7 @@ impl ZoneWeatherApi for NoaaWeatherServices {
 impl AlertApi for NoaaWeatherServices {
     async fn active_alerts(&self) -> Result<Vec<WeatherAlert>, NoaaWeatherError> {
         match self {
-            Self::NOAA(svc) => svc.active_alerts().await,
+            Self::Noaa(svc) => svc.active_alerts().await,
             Self::HappyPath(svc) => svc.active_alerts().await,
         }
     }
@@ -117,7 +117,10 @@ impl NoaaWeatherApi {
             .build()?;
 
         let retry_policy = ExponentialBackoff::builder()
-            .retry_bounds(time::Duration::from_millis(1000), time::Duration::from_secs(300))
+            .retry_bounds(
+                time::Duration::from_millis(1000),
+                time::Duration::from_secs(300),
+            )
             .build_with_max_retries(3);
 
         Ok(reqwest_middleware::ClientBuilder::new(client)
@@ -143,14 +146,14 @@ impl NoaaWeatherApi {
 impl ZoneWeatherApi for NoaaWeatherApi {
     #[tracing::instrument(level = "debug", skip(self))]
     async fn zone_observation(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone: &LocationZoneCode,
     ) -> Result<WeatherFrame, NoaaWeatherError> {
         let mut url = self.base_url.clone();
         url.path_segments_mut()
             .unwrap()
             .push("zones")
             .push("forecast")
-            .push(zone.code.as_str())
+            .push(zone.as_ref())
             .push("observations");
 
         let geojson = self.fetch_geojson("observations", url).await?;
@@ -160,15 +163,14 @@ impl ZoneWeatherApi for NoaaWeatherApi {
 
     #[tracing::instrument(level = "debug", skip(self))]
     async fn zone_forecast(
-        &self, zone: &LocationZoneIdentifier,
+        &self, zone_type: LocationZoneType, zone_code: &LocationZoneCode,
     ) -> Result<ZoneForecast, NoaaWeatherError> {
         let mut url = self.base_url.clone();
-        let zone_type: &'static str = zone.zone_type.into();
         url.path_segments_mut()
             .unwrap()
             .push("zones")
-            .push(zone_type)
-            .push(zone.code.as_str())
+            .push(zone_type.into())
+            .push(zone_code.as_ref())
             .push("forecast");
 
         let geojson = self.fetch_geojson("forecast", url).await?;
@@ -209,7 +211,7 @@ pub struct HappyPathWeatherServices;
 #[async_trait]
 impl ZoneWeatherApi for HappyPathWeatherServices {
     async fn zone_observation(
-        &self, _zone: &LocationZoneIdentifier,
+        &self, _zone: &LocationZoneCode,
     ) -> Result<WeatherFrame, NoaaWeatherError> {
         Ok(WeatherFrame {
             timestamp: iso8601_timestamp::Timestamp::now_utc(),
@@ -224,10 +226,10 @@ impl ZoneWeatherApi for HappyPathWeatherServices {
     }
 
     async fn zone_forecast(
-        &self, zone: &LocationZoneIdentifier,
+        &self, _zone_type: LocationZoneType, zone_code: &LocationZoneCode,
     ) -> Result<ZoneForecast, NoaaWeatherError> {
         Ok(ZoneForecast {
-            zone_code: zone.code.to_string(),
+            zone_code: zone_code.to_string(),
             updated: Utc::now(),
             periods: vec![crate::model::ForecastDetail {
                 name: "Rest of Day".to_string(),
@@ -243,7 +245,7 @@ impl AlertApi for HappyPathWeatherServices {
         Ok(vec![
             WeatherAlert {
                 affected_zones: vec![
-                    LocationZoneIdentifier { zone_type: model::LocationZoneType::County, code: "MDC031".to_string() }
+                    LocationZoneCode::new("MDC031".to_string())
                 ],
                 status: model::AlertStatus::Actual,
                 message_type: model::AlertMessageType::Alert,

@@ -5,23 +5,25 @@ mod result;
 mod state;
 mod weather_routes;
 
-use std::net::TcpListener;
-use axum::{BoxError, Router};
+use crate::settings::HttpApiSettings;
+use crate::Settings;
+pub use result::HttpResult;
+
 use axum::error_handling::HandleErrorLayer;
 use axum::http::{Response, StatusCode, Uri};
+use axum::{BoxError, Router};
+use errors::ApiError;
 use settings_loader::common::database::DatabaseSettings;
 use sqlx::PgPool;
+use std::net::TcpListener;
 use tokio::signal;
-use errors::ApiError;
 use tokio::task::JoinHandle;
 use tower::ServiceBuilder;
 use tower_governor::governor::GovernorConfigBuilder;
-use tower_governor::GovernorLayer;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
+use tower_governor::GovernorLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tower_http::ServiceBuilderExt;
-use crate::Settings;
-use crate::settings::HttpApiSettings;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{SwaggerUi, Url as SwaggerUrl};
 
@@ -33,7 +35,7 @@ pub struct Server {
 }
 
 impl Server {
-    #[tracing::instrument(level="debug", skip(settings))]
+    #[tracing::instrument(level = "debug", skip(settings))]
     pub async fn build(settings: &Settings) -> Result<Self, ApiError> {
         let connection_pool = get_connection_pool(&settings.database);
         let address = settings.api.server.address();
@@ -50,7 +52,7 @@ impl Server {
             connection_pool,
             &RunParameters::from_settings(settings),
         )
-            .await?;
+        .await?;
 
         Ok(Self { port, server_handle })
     }
@@ -169,7 +171,7 @@ async fn shutdown_signal() {
     };
 
     #[cfg(unix)]
-        let terminate = async {
+    let terminate = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())
             .expect("failed to install signal handler")
             .recv()
