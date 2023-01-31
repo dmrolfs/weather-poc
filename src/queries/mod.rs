@@ -1,6 +1,6 @@
 mod broadcast;
 
 pub use broadcast::{
-    CommandEnvelope, EventBroadcastQuery, EventEnvelope, CommandRelay, EventSubscriber,
+    CommandEnvelope, CommandRelay, EventBroadcastQuery, EventEnvelope, EventSubscriber,
     SubscribeCommand,
 };

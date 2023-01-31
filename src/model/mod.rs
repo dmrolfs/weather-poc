@@ -471,8 +471,7 @@ impl<'a> PropertyExtractor<'a> {
     Serialize,
     Deserialize,
 )]
-#[strum(serialize_all = "snake_case", ascii_case_insensitive)]
-#[serde(rename_all = "snake_case")]
+#[strum(ascii_case_insensitive)]
 pub enum AlertStatus {
     Actual,
     Exercise,
@@ -495,8 +494,7 @@ pub enum AlertStatus {
     Serialize,
     Deserialize,
 )]
-#[strum(serialize_all = "snake_case", ascii_case_insensitive)]
-#[serde(rename_all = "snake_case")]
+#[strum(ascii_case_insensitive)]
 pub enum AlertMessageType {
     Alert,
     Update,

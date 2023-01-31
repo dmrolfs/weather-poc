@@ -45,7 +45,11 @@ impl<A: Aggregate> EventEnvelope<A> {
     }
 
     pub fn as_parts(&self) -> (String, A::Event, HashMap<String, String>) {
-        (self.publisher_id().to_string(), self.payload().clone(), self.metadata().clone())
+        (
+            self.publisher_id().to_string(),
+            self.payload().clone(),
+            self.metadata().clone(),
+        )
     }
 
     pub fn publisher_id(&self) -> &str {
@@ -135,7 +139,11 @@ where
     A::Command: Debug + Clone,
 {
     pub fn as_parts(&self) -> (String, A::Command, HashMap<String, String>) {
-        (self.target_id().to_string(), self.payload().clone(), self.metadata().clone())
+        (
+            self.target_id().to_string(),
+            self.payload().clone(),
+            self.metadata().clone(),
+        )
     }
 }
 
@@ -186,13 +194,15 @@ where
 }
 
 impl<A, ES> CommandRelay<A, ES>
-    where
-        A: Aggregate,
-        A::Command: Debug,
-        ES: EventStore<A>,
+where
+    A: Aggregate,
+    A::Command: Debug,
+    ES: EventStore<A>,
 {
-    pub fn new(aggregate: Arc<CqrsFramework<A, ES>>, command_rx: mpsc::Receiver<CommandEnvelope<A>>) -> Self {
-        Self { command_rx, aggregate, }
+    pub fn new(
+        aggregate: Arc<CqrsFramework<A, ES>>, command_rx: mpsc::Receiver<CommandEnvelope<A>>,
+    ) -> Self {
+        Self { command_rx, aggregate }
     }
 }
 
@@ -213,7 +223,12 @@ where
             match self.aggregate.execute_with_metadata(&agg_id, cmd, meta).await {
                 Ok(()) => tracing::debug!(?command, "command relayed to {}", A::aggregate_type()),
                 Err(error) => {
-                    tracing::error!(?error, ?command, "failed to relay command to {}", A::aggregate_type())
+                    tracing::error!(
+                        ?error,
+                        ?command,
+                        "failed to relay command to {}",
+                        A::aggregate_type()
+                    )
                 },
             }
         }
@@ -387,7 +402,6 @@ where
             tracing::info!("{publisher_id} event broadcast removed {subscriber_id} from {nr_subscriptions} subscriptions.");
         }
     }
-
 }
 
 impl<P, S, C> EventSubscriber<P, S, C>
@@ -418,7 +432,7 @@ where
             if let Err(error) = outcome {
                 tracing::error!(
                     ?error, command=?cmd, ?metadata,
-                    "event subscriber forward to {}[{subscriber_id}] failed!", S::aggregate_type()
+                    "event subscriber forward to {}[{subscriber_id}] failed because the channel is closed!", S::aggregate_type()
                 );
             }
         }

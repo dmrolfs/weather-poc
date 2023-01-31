@@ -138,8 +138,11 @@ pub enum QuantitativeProperty {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PropertyDetail {
-    value: f32,
+    #[serde(default)]
+    value: Option<f32>,
+
     unit_code: String,
+
     quality_control: QualityControl,
 }
 
@@ -157,9 +160,9 @@ impl QuantitativeAggregation {
     pub fn new(detail: PropertyDetail) -> Self {
         Self {
             count: 1,
-            value_sum: detail.value,
-            max_value: detail.value,
-            min_value: detail.value,
+            value_sum: detail.value.unwrap_or(0.0),
+            max_value: detail.value.unwrap_or(0.0),
+            min_value: detail.value.unwrap_or(0.0),
             unit_code: detail.unit_code.into(),
             quality_control: detail.quality_control,
         }
@@ -180,17 +183,17 @@ impl QuantitativeAggregation {
 
             Ordering::Greater => {
                 self.count = 1;
-                self.value_sum = detail.value;
-                self.max_value = detail.value;
-                self.min_value = detail.value;
+                self.value_sum = detail.value.unwrap_or(0.0);
+                self.max_value = detail.value.unwrap_or(0.0);
+                self.min_value = detail.value.unwrap_or(0.0);
                 self.quality_control = detail.quality_control;
             },
 
             Ordering::Equal => {
                 self.count += 1;
-                self.value_sum += detail.value;
-                self.max_value = detail.value.max(self.max_value);
-                self.min_value = detail.value.min(self.min_value);
+                self.value_sum = detail.value.map_or(self.value_sum, |d| d + self.value_sum);
+                self.max_value = detail.value.map_or(self.max_value, |d| d.max(self.max_value));
+                self.min_value = detail.value.map_or(self.min_value, |d| d.min(self.min_value));
             },
         }
     }

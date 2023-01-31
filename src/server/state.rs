@@ -89,7 +89,7 @@ pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError>
     let noaa = NoaaWeatherServices::Noaa(noaa_api);
 
     let (location_tx, location_rx) = mpsc::channel(num_cpus::get());
-    let (update_tx, _u_rx) = mpsc::channel(num_cpus::get());
+    let (update_tx, update_rx) = mpsc::channel(num_cpus::get());
 
     let location_broadcast_query: EventBroadcastQuery<LocationZone> =
         EventBroadcastQuery::new(num_cpus::get());
@@ -100,7 +100,7 @@ pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError>
 
     let update_locations_agg = make_update_locations_saga(
         location_tx,
-        update_tx,
+        (update_tx, update_rx),
         &location_subscriber,
         noaa.clone(),
         db_pool.clone(),
@@ -134,7 +134,10 @@ pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError>
 
 async fn make_update_locations_saga<C>(
     location_tx: mpsc::Sender<CommandEnvelope<LocationZone>>,
-    update_tx: mpsc::Sender<CommandEnvelope<UpdateLocations>>,
+    (update_tx, update_rx): (
+        mpsc::Sender<CommandEnvelope<UpdateLocations>>,
+        mpsc::Receiver<CommandEnvelope<UpdateLocations>>,
+    ),
     location_subscriber: &EventSubscriber<LocationZone, UpdateLocations, C>,
     noaa: NoaaWeatherServices, db_pool: PgPool,
 ) -> UpdateLocationsSaga
@@ -157,11 +160,15 @@ where
     update_locations_services
         .with_subscriber_tx(location_subscriber.subscriber_admin_tx())
         .await;
-    Arc::new(postgres_es::postgres_cqrs(
+    let agg = Arc::new(postgres_es::postgres_cqrs(
         db_pool,
         update_locations_queries,
         update_locations_services,
-    ))
+    ));
+
+    let relay = CommandRelay::new(agg.clone(), update_rx);
+    relay.run();
+    agg
 }
 
 fn make_location_zone_aggregate_view(

@@ -48,80 +48,89 @@ impl Query<UpdateLocations> for UpdateLocationZoneController {
         let metadata =
             maplit::hashmap! { "correlation".to_string() => update_saga_id.to_string(), };
 
-        let mut handles = vec![];
-
         for event in events {
             if let E::Started(_, zones) = &event.payload {
+                let saga_id = update_saga_id.to_string();
+                let zones = zones.clone();
+                let metadata = metadata.clone();
+
+                self.inner.clone().do_spawn_update_observations(
+                    saga_id.as_str(),
+                    zones.as_slice(),
+                    &metadata,
+                );
+                self.inner.clone().do_spawn_update_forecasts(
+                    saga_id.as_str(),
+                    zones.as_slice(),
+                    &metadata,
+                );
+
                 let inner_ref = self.inner.clone();
-
-                let update_zones: HashSet<_> = zones.iter().collect();
-
-                let observation_tasks: Vec<_> = zones
-                    .iter()
-                    .cloned()
-                    .map(|z| {
-                        let inner = inner_ref.clone();
-                        let update_saga_id = update_saga_id.to_string();
-                        let metadata = metadata.clone();
-                        task::spawn(async move {
-                            inner
-                                .do_update_zone_observation(update_saga_id.as_str(), &z, metadata)
-                                .await
-                        })
-                    })
-                    .collect();
-
-                let forecast_tasks: Vec<_> = zones
-                    .iter()
-                    .cloned()
-                    .map(|z| {
-                        let inner = inner_ref.clone();
-                        let update_saga_id = update_saga_id.to_string();
-                        let metadata = metadata.clone();
-                        task::spawn(async move {
-                            inner
-                                .do_update_zone_forecast(update_saga_id.as_str(), &z, metadata)
-                                .await
-                        })
-                    })
-                    .collect();
-
-                let mut alert_tasks = vec![];
-                let alerts = inner_ref.do_get_alerts().await;
-                for alert in alerts {
-                    for affected_zone in alert.affected_zones.clone() {
-                        if update_zones.contains(&affected_zone) {
-                            let inner = inner_ref.clone();
-                            let update_saga_id = update_saga_id.to_string();
-                            let metadata = metadata.clone();
-                            let alert = alert.clone();
-                            let update_task = task::spawn(async move {
-                                inner
-                                    .do_update_zone_alert(
-                                        update_saga_id.as_str(),
-                                        affected_zone,
-                                        alert,
-                                        metadata,
-                                    )
-                                    .await
-                            });
-                            alert_tasks.push(update_task);
-                        }
-                    }
-                }
-
-                handles.extend(observation_tasks);
-                handles.extend(forecast_tasks);
-                handles.extend(alert_tasks);
+                tokio::spawn(async move {
+                    inner_ref.do_spawn_update_alerts(saga_id.as_str(), zones.as_slice(), &metadata);
+                });
             }
         }
-
-        futures::future::join_all(handles).await;
     }
 }
 
 impl UpdateLocationZoneControllerRef {
-    #[tracing::instrument(level="trace", skip())]
+    #[tracing::instrument(level = "trace", skip())]
+    fn do_spawn_update_observations(
+        self: Arc<Self>, update_saga_id: &str, zones: &[LocationZoneCode],
+        metadata: &HashMap<String, String>,
+    ) {
+        for z in zones.iter().cloned() {
+            let self_ref = self.clone();
+            let saga_id = update_saga_id.to_string();
+            let metadata = metadata.clone();
+            task::spawn(async move {
+                tracing::debug!("spawning observation update on {z} zone..");
+                self_ref.do_update_zone_observation(&saga_id, &z, metadata).await;
+            });
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip())]
+    fn do_spawn_update_forecasts(
+        self: Arc<Self>, update_saga_id: &str, zones: &[LocationZoneCode],
+        metadata: &HashMap<String, String>,
+    ) {
+        for z in zones.iter().cloned() {
+            let self_ref = self.clone();
+            let saga_id = update_saga_id.to_string();
+            let metadata = metadata.clone();
+            task::spawn(async move {
+                tracing::debug!("spawning forecast update on {z} zone..");
+                self_ref.do_update_zone_forecast(&saga_id, &z, metadata).await;
+            });
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip())]
+    async fn do_spawn_update_alerts(
+        self: Arc<Self>, update_saga_id: &str, zones: &[LocationZoneCode],
+        metadata: &HashMap<String, String>,
+    ) {
+        let update_zones: HashSet<_> = zones.iter().collect();
+
+        for alert in self.do_get_alerts().await {
+            let update_affected = alert.affected_zones.iter().filter(|z| update_zones.contains(z));
+
+            for affected in update_affected.cloned() {
+                let self_ref = self.clone();
+                let saga_id = update_saga_id.to_string();
+                let alert = alert.clone();
+                let metadata = metadata.clone();
+                task::spawn(async move {
+                    tracing::debug!(?alert, "spawning alert update on {affected} zone..");
+                    self_ref.do_update_zone_alert(&saga_id, affected, alert, metadata).await;
+                });
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip())]
     async fn do_update_zone_observation(
         &self, update_saga_id: &str, zone: &LocationZoneCode, metadata: HashMap<String, String>,
     ) {
@@ -134,7 +143,7 @@ impl UpdateLocationZoneControllerRef {
         self.do_send_command(update_saga_id, command).await;
     }
 
-    #[tracing::instrument(level="trace", skip())]
+    #[tracing::instrument(level = "trace", skip())]
     async fn do_update_zone_forecast(
         &self, update_saga_id: &str, zone: &LocationZoneCode, metadata: HashMap<String, String>,
     ) {
@@ -158,44 +167,7 @@ impl UpdateLocationZoneControllerRef {
         }
     }
 
-    // async fn do_update_alerts(&self, update_saga_id: &str, metadata: HashMap<String, String>,) -> Vec<impl Future<Output = ()>> {
-    //     let alerts = match self.noaa.active_alerts().await {
-    //         Ok(alerts) => alerts,
-    //         Err(error) => {
-    //             tracing::error!(?error, "failed to pull weather alerts from NOAA.");
-    //             vec![]
-    //         },
-    //     };
-    //
-    //     let mut tasks = vec![];
-    //
-    //     for alert in alerts {
-    //         for affected_zone in alert.affected_zones.clone() {
-    //             if self.zones.contains(&affected_zone) {
-    //                 let task = self.do_update_zone_alert(update_saga_id, affected_zone, alert.clone(), metadata.clone());
-    //                 tasks.push(task);
-    //             }
-    //         }
-    //     }
-    //
-    //     tasks
-    //
-    //     // alerts
-    //     //     .into_iter()
-    //     //     .flat_map(|alert| {
-    //     //         let alert_0 = alert.clone();
-    //     //         alert.affected_zones
-    //     //             .into_iter()
-    //     //             .filter(|affected_zone| self.zones.contains(affected_zone))
-    //     //             .map(|affected_zone| {
-    //     //                 self.do_update_zone_alert(update_saga_id, affected_zone, alert_0.clone(), metadata.clone())
-    //     //             })
-    //     //             .collect::<Vec<_>>()
-    //     //     })
-    //     //     .collect()
-    // }
-
-    #[tracing::instrument(level="trace", skip())]
+    #[tracing::instrument(level = "trace", skip())]
     async fn do_update_zone_alert(
         &self, update_saga_id: &str, zone: LocationZoneCode, alert: WeatherAlert,
         metadata: HashMap<String, String>,
@@ -209,14 +181,18 @@ impl UpdateLocationZoneControllerRef {
         self.do_send_command(update_saga_id, command).await
     }
 
-    #[tracing::instrument(level="trace", skip())]
+    #[tracing::instrument(level = "trace", skip())]
     async fn do_send_command(
         &self, update_saga_id: &str, command: queries::CommandEnvelope<LocationZone>,
     ) {
         let zone = LocationZoneCode::new(command.target_id());
         let metadata = command.metadata().clone();
         let send_outcome = self.location_tx.send(command.clone()).await;
-        tracing::debug!(?send_outcome, ?command, "sending command to location aggregate channel");
+        tracing::debug!(
+            ?send_outcome,
+            ?command,
+            "sending command to location aggregate channel"
+        );
         if send_outcome.is_err() {
             let command = queries::CommandEnvelope::new_with_metadata(
                 update_saga_id,
@@ -225,9 +201,13 @@ impl UpdateLocationZoneControllerRef {
             );
 
             let note_outcome = self.update_tx.send(command.clone()).await;
-            tracing::warn!(?note_outcome, ?command, "sending failure note command to update saga channel");
+            tracing::error!(
+                ?note_outcome,
+                ?command,
+                "sending failure note command to update saga channel"
+            );
             if let Err(error) = note_outcome {
-                tracing::warn!(
+                tracing::error!(
                     ?error,
                     "failed to update saga on zone command failure: {zone}"
                 );
