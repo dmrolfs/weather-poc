@@ -1,30 +1,40 @@
 pub use errors::RegistrarError;
 pub use protocol::{RegistrarCommand, RegistrarEvent};
-pub use service::{HappyPathServices, RegistrarServices, StartUpdateLocationsServices};
+pub use service::{FullRegistrarServices, HappyPathServices, RegistrarServices};
 
-use super::Location;
 use crate::model::LocationZoneCode;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use once_cell::sync::Lazy;
 use postgres_es::PostgresCqrs;
-use pretty_snowflake::{Id, Label};
+use pretty_snowflake::{Id, Label, Labeling};
 use serde::{Deserialize, Serialize};
 use service::RegistrarApi;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub type RegistrarAggregate = Arc<PostgresCqrs<Registrar>>;
 
 pub const AGGREGATE_TYPE: &str = "registrar";
+pub const REGISTRAR_SNOWFLAKE_ID: i64 = 1;
+pub const REGISTRAR_PRETTY_ID: &str = "<singleton>";
+
+static REGISTRAR_SINGLETON_ID: Lazy<Id<Registrar>> = Lazy::new(|| {
+    Id::direct(
+        <Registrar as Label>::labeler().label(),
+        REGISTRAR_SNOWFLAKE_ID,
+        REGISTRAR_PRETTY_ID,
+    )
+});
 
 #[inline]
-pub fn generate_id() -> Id<Registrar> {
-    pretty_snowflake::generator::next_id()
+pub fn singleton_id() -> Id<Registrar> {
+    REGISTRAR_SINGLETON_ID.clone()
 }
 
 #[derive(Debug, Default, Clone, Label, PartialEq, Serialize, Deserialize)]
 pub struct Registrar {
-    location_codes: HashMap<Location, LocationZoneCode>,
+    location_codes: HashSet<LocationZoneCode>,
 }
 
 #[async_trait]
@@ -47,8 +57,18 @@ impl Aggregate for Registrar {
                 let loc_codes: Vec<_> = self.location_codes.iter().collect();
                 service.update_weather(&loc_codes).await.map(|_| vec![])
             },
-            RegistrarCommand::MonitorLocation(loc, zone) => {
-                Ok(vec![RegistrarEvent::LocationAdded(loc, zone)])
+            RegistrarCommand::MonitorForecastZone(zone) if !self.location_codes.contains(&zone) => {
+                service.initialize_forecast_zone(&zone).await?;
+                Ok(vec![RegistrarEvent::ForecastZoneAdded(zone)])
+            },
+            RegistrarCommand::MonitorForecastZone(zone) => Err(RegistrarError::RejectedCommand(
+                format!("already monitoring location zone code: {zone}"),
+            )),
+            RegistrarCommand::ClearZoneMonitoring => {
+                Ok(vec![RegistrarEvent::AllForecastZonesForgotten])
+            },
+            RegistrarCommand::ForgetForecastZone(zone) => {
+                Ok(vec![RegistrarEvent::ForecastZoneForgotten(zone)])
             },
         }
     }
@@ -56,8 +76,14 @@ impl Aggregate for Registrar {
     #[tracing::instrument(level = "debug")]
     fn apply(&mut self, event: Self::Event) {
         match event {
-            RegistrarEvent::LocationAdded(loc, zone) => {
-                self.location_codes.insert(loc, zone);
+            RegistrarEvent::ForecastZoneAdded(zone) => {
+                self.location_codes.insert(zone);
+            },
+            RegistrarEvent::ForecastZoneForgotten(zone) => {
+                self.location_codes.remove(&zone);
+            },
+            RegistrarEvent::AllForecastZonesForgotten => {
+                self.location_codes.clear();
             },
         }
     }
@@ -66,56 +92,76 @@ impl Aggregate for Registrar {
 mod service {
     use super::RegistrarError;
     use crate::model::update::UpdateLocationsCommand;
-    use crate::model::{Location, LocationZoneCode, UpdateLocationsSaga};
+    use crate::model::zone::LocationZoneCommand;
+    use crate::model::{LocationZoneAggregate, LocationZoneCode, UpdateLocationsSaga};
     use async_trait::async_trait;
     use std::fmt;
 
     #[async_trait]
     pub trait RegistrarApi: Sync + Send {
-        async fn update_weather(
-            &self, zones: &[(&Location, &LocationZoneCode)],
+        async fn initialize_forecast_zone(
+            &self, zone: &LocationZoneCode,
         ) -> Result<(), RegistrarError>;
+
+        async fn update_weather(&self, zones: &[&LocationZoneCode]) -> Result<(), RegistrarError>;
     }
 
     #[derive(Debug, Clone)]
     pub enum RegistrarServices {
-        Saga(StartUpdateLocationsServices),
+        Full(FullRegistrarServices),
         HappyPath(HappyPathServices),
     }
 
     #[async_trait]
     impl RegistrarApi for RegistrarServices {
-        async fn update_weather(
-            &self, zones: &[(&Location, &LocationZoneCode)],
+        async fn initialize_forecast_zone(
+            &self, zone: &LocationZoneCode,
         ) -> Result<(), RegistrarError> {
             match self {
-                Self::Saga(svc) => svc.update_weather(zones).await,
+                Self::Full(svc) => svc.initialize_forecast_zone(zone).await,
+                Self::HappyPath(svc) => svc.initialize_forecast_zone(zone).await,
+            }
+        }
+
+        async fn update_weather(&self, zones: &[&LocationZoneCode]) -> Result<(), RegistrarError> {
+            match self {
+                Self::Full(svc) => svc.update_weather(zones).await,
                 Self::HappyPath(svc) => svc.update_weather(zones).await,
             }
         }
     }
 
     #[derive(Clone)]
-    pub struct StartUpdateLocationsServices(UpdateLocationsSaga);
+    pub struct FullRegistrarServices {
+        location: LocationZoneAggregate,
+        update: UpdateLocationsSaga,
+    }
 
-    impl StartUpdateLocationsServices {
-        pub fn new(saga: UpdateLocationsSaga) -> Self {
-            Self(saga)
+    impl FullRegistrarServices {
+        pub fn new(location: LocationZoneAggregate, update: UpdateLocationsSaga) -> Self {
+            Self { location, update }
         }
     }
 
-    impl fmt::Debug for StartUpdateLocationsServices {
+    impl fmt::Debug for FullRegistrarServices {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("StartUpdateLocationsService").finish()
         }
     }
 
     #[async_trait]
-    impl RegistrarApi for StartUpdateLocationsServices {
-        #[tracing::instrument(level = "debug", skip(self))]
-        async fn update_weather(
-            &self, zones: &[(&Location, &LocationZoneCode)],
+    impl RegistrarApi for FullRegistrarServices {
+        async fn initialize_forecast_zone(
+            &self, zone: &LocationZoneCode,
         ) -> Result<(), RegistrarError> {
+            let aggregate_id = zone.as_ref();
+            let command = LocationZoneCommand::WatchZone(zone.clone());
+            self.location.execute(aggregate_id, command).await?;
+            Ok(())
+        }
+
+        #[tracing::instrument(level = "debug", skip(self))]
+        async fn update_weather(&self, zones: &[&LocationZoneCode]) -> Result<(), RegistrarError> {
             // let mut zone_ids = Vec::with_capacity(zones.len());
             // let mut events = Vec::with_capacity(zones.len());
             // for (location, zone_id) in zones {
@@ -124,13 +170,15 @@ mod service {
             //     events.push(RegistrarEvent::LocationAdded(location, zone_id.clone()));
             //     zone_ids.push(zone_id);
             // }
-            let zone_ids = zones.iter().map(|(_, code)| *code).cloned().collect();
+            let zone_ids = zones.iter().copied().cloned().collect();
 
             let saga_id = crate::model::update::generate_id();
             let metadata =
                 maplit::hashmap! { "correlation".to_string() => saga_id.pretty().to_string(), };
             let command = UpdateLocationsCommand::UpdateLocations(saga_id.clone(), zone_ids);
-            self.0.execute_with_metadata(saga_id.pretty(), command, metadata).await?;
+            self.update
+                .execute_with_metadata(saga_id.pretty(), command, metadata)
+                .await?;
             // Ok(events)
             Ok(())
         }
@@ -141,9 +189,13 @@ mod service {
 
     #[async_trait]
     impl RegistrarApi for HappyPathServices {
-        async fn update_weather(
-            &self, _zones: &[(&Location, &LocationZoneCode)],
+        async fn initialize_forecast_zone(
+            &self, _zone: &LocationZoneCode,
         ) -> Result<(), RegistrarError> {
+            Ok(())
+        }
+
+        async fn update_weather(&self, _zones: &[&LocationZoneCode]) -> Result<(), RegistrarError> {
             // let events = zones
             //     .iter()
             //     .map(|(loc, zone)| RegistrarEvent::LocationAdded(**loc, (*zone).clone()))
@@ -155,7 +207,7 @@ mod service {
 }
 
 mod protocol {
-    use crate::model::{Location, LocationZoneCode};
+    use crate::model::LocationZoneCode;
     use cqrs_es::DomainEvent;
     use serde::{Deserialize, Serialize};
     use strum_macros::Display;
@@ -163,7 +215,9 @@ mod protocol {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub enum RegistrarCommand {
         UpdateWeather,
-        MonitorLocation(Location, LocationZoneCode),
+        MonitorForecastZone(LocationZoneCode),
+        ClearZoneMonitoring,
+        ForgetForecastZone(LocationZoneCode),
     }
 
     const VERSION: &str = "1.0";
@@ -171,7 +225,9 @@ mod protocol {
     #[derive(Debug, Display, Clone, PartialEq, Eq, Serialize, Deserialize)]
     #[strum(serialize_all = "snake_case")]
     pub enum RegistrarEvent {
-        LocationAdded(Location, LocationZoneCode),
+        ForecastZoneAdded(LocationZoneCode),
+        ForecastZoneForgotten(LocationZoneCode),
+        AllForecastZonesForgotten,
     }
 
     impl DomainEvent for RegistrarEvent {
@@ -187,11 +243,18 @@ mod protocol {
 
 mod errors {
     use crate::model::update::UpdateLocationsError;
+    use crate::model::zone::LocationZoneError;
     use thiserror::Error;
 
     #[derive(Debug, Error)]
     pub enum RegistrarError {
         #[error("{0}")]
-        UpdateLocations(#[from] cqrs_es::AggregateError<UpdateLocationsError>),
+        LocationZone(#[from] cqrs_es::AggregateError<LocationZoneError>),
+
+        #[error("{0}")]
+        UpdateForecastZones(#[from] cqrs_es::AggregateError<UpdateLocationsError>),
+
+        #[error("rejected registrar command: {0}")]
+        RejectedCommand(String),
     }
 }

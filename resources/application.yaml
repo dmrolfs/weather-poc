@@ -12,7 +12,7 @@ http_api:
 database:
   host: localhost
   port: 5432
-  database_name: bank
+  database_name: weather
   require_ssl: false
   max_connections: 10
   max_lifetime_secs: 1800

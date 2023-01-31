@@ -8,6 +8,7 @@ mod weather_routes;
 use crate::settings::HttpApiSettings;
 use crate::Settings;
 pub use result::HttpResult;
+use std::fmt;
 
 use axum::error_handling::HandleErrorLayer;
 use axum::http::{Response, StatusCode, Uri};
@@ -34,11 +35,17 @@ pub struct Server {
     server_handle: HttpJoinHandle,
 }
 
+impl fmt::Debug for Server {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Server").field("port", &self.port).finish()
+    }
+}
+
 impl Server {
     #[tracing::instrument(level = "debug", skip(settings))]
     pub async fn build(settings: &Settings) -> Result<Self, ApiError> {
         let connection_pool = get_connection_pool(&settings.database);
-        let address = settings.api.server.address();
+        let address = settings.http_api.server.address();
         let listener = tokio::net::TcpListener::bind(&address).await?;
         tracing::info!(
             "{:?} API listening on {address}: {listener:?}",
@@ -78,11 +85,11 @@ pub struct RunParameters {
 
 impl RunParameters {
     pub fn from_settings(settings: &Settings) -> Self {
-        Self { http_api: settings.api.clone() }
+        Self { http_api: settings.http_api.clone() }
     }
 }
 
-#[tracing::instrument(level = "trace")]
+#[tracing::instrument(level = "debug")]
 pub async fn run_http_server(
     listener: TcpListener, db_pool: PgPool, params: &RunParameters,
 ) -> Result<HttpJoinHandle, ApiError> {

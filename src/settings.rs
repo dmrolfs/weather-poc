@@ -11,7 +11,7 @@ use settings_loader::{common::database::DatabaseSettings, SettingsLoader};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Settings {
-    pub api: HttpApiSettings,
+    pub http_api: HttpApiSettings,
     pub database: DatabaseSettings,
 
     #[serde(flatten)]

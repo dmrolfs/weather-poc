@@ -23,7 +23,7 @@ update:
   cargo update
 
 run:
-  RUST_BACKTRACE=full RUST_LOG="debug" cargo run -- --secrets ./resources/secrets.yaml | bunyan
+  RUST_BACKTRACE=full RUST_LOG="info,weather=trace" cargo run -- --secrets ./resources/secrets.yaml | bunyan
 
 #build-docker:
 #  cargo test

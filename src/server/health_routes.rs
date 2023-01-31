@@ -1,4 +1,5 @@
 use super::state::{AppState, WEATHER_QUERY_VIEW};
+use crate::server::state::MONITORED_ZONES_QUERY_VIEW;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -74,7 +75,7 @@ impl From<HealthStatus> for StatusCode {
 #[utoipa::path(
     get,
     path = "/",
-    context_path = "/api/health",
+    context_path = "/api/v1/health",
     tag = "health",
     responses(
         (status = 200, description = "system up"),
@@ -92,7 +93,7 @@ async fn serve_health(State(app): State<AppState>) -> impl IntoResponse {
 #[utoipa::path(
     get,
     path = "/deep",
-    context_path = "/api/health",
+    context_path = "/api/v1/health",
     tag = "health",
     responses(
         (status = 200, description = "system up"),
@@ -123,6 +124,17 @@ async fn check_health(state: AppState) -> (HealthStatus, HashMap<HealthStatus, V
         .map_err(|err| err.into())
         .map(|_| ());
 
+    let monitored_zones_view_select_sql = sql::Select::new()
+        .select("version")
+        .from(MONITORED_ZONES_QUERY_VIEW)
+        .to_string();
+    let monitored_zones_view_status: Result<(), anyhow::Error> =
+        sqlx::query(&monitored_zones_view_select_sql)
+            .fetch_optional(&state.db_pool)
+            .await
+            .map_err(|err| err.into())
+            .map(|_| ());
+
     let model_select_sql = sql::Select::new().select("event_version").from("events").to_string();
     let model_status: Result<(), anyhow::Error> = sqlx::query(&model_select_sql)
         .fetch_optional(&state.db_pool)
@@ -133,6 +145,7 @@ async fn check_health(state: AppState) -> (HealthStatus, HashMap<HealthStatus, V
     let service_statuses = vec![
         ("model", model_status),
         ("weather_view", weather_view_status),
+        ("monitored_zones_view", monitored_zones_view_status),
     ];
 
     let service_by_status = service_statuses

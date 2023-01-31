@@ -8,18 +8,13 @@ use crate::services::noaa::ZoneWeatherApi;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use postgres_es::PostgresCqrs;
-use pretty_snowflake::{Id, Label};
+use pretty_snowflake::Label;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub type LocationZoneAggregate = Arc<PostgresCqrs<LocationZone>>;
 
 pub const AGGREGATE_TYPE: &str = "location_zone";
-
-#[inline]
-pub fn generate_id() -> Id<LocationZone> {
-    pretty_snowflake::generator::next_id()
-}
 
 #[derive(Debug, Default, Clone, Label, PartialEq, Serialize, Deserialize)]
 pub struct LocationZone {
@@ -104,8 +99,8 @@ impl AggregateState for QuiescentLocationZone {
         &self, command: Self::Command, _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            LocationZoneCommand::WatchZone(zone_type, zone_code) => {
-                Ok(vec![LocationZoneEvent::ZoneSet(zone_type, zone_code)])
+            LocationZoneCommand::WatchZone(zone_code) => {
+                Ok(vec![LocationZoneEvent::ZoneSet(zone_code)])
             },
 
             cmd => Err(LocationZoneError::RejectedCommand(format!(
@@ -117,9 +112,8 @@ impl AggregateState for QuiescentLocationZone {
     #[tracing::instrument(level = "trace")]
     fn apply(&self, event: Self::Event) -> Option<Self::State> {
         match event {
-            LocationZoneEvent::ZoneSet(zone_type, zone_code) => {
+            LocationZoneEvent::ZoneSet(zone_code) => {
                 Some(Self::State::Active(ActiveLocationZone {
-                    zone_type,
                     zone_id: zone_code,
                     weather: None,
                     forecast: None,
@@ -137,7 +131,6 @@ impl AggregateState for QuiescentLocationZone {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct ActiveLocationZone {
-    pub zone_type: LocationZoneType,
     pub zone_id: LocationZoneCode,
     pub weather: Option<WeatherFrame>,
     pub forecast: Option<ZoneForecast>,
@@ -163,7 +156,8 @@ impl AggregateState for ActiveLocationZone {
             },
 
             LocationZoneCommand::Forecast => {
-                let forecast = services.zone_forecast(self.zone_type, &self.zone_id).await?;
+                let forecast =
+                    services.zone_forecast(LocationZoneType::Forecast, &self.zone_id).await?;
                 Ok(vec![LocationZoneEvent::ForecastUpdated(forecast)])
             },
 
@@ -177,10 +171,12 @@ impl AggregateState for ActiveLocationZone {
                 Ok(event.into_iter().collect())
             },
 
-            LocationZoneCommand::WatchZone(new_zone_type, new_zone_code) => Err(LocationZoneError::RejectedCommand(format!(
-                "LocationZone already watching zone, {}, cannot change to watch: {new_zone_type}/{new_zone_code}",
+            LocationZoneCommand::WatchZone(new_zone_code) => {
+                Err(LocationZoneError::RejectedCommand(format!(
+                "LocationZone already watching zone, {}, cannot change to watch: {new_zone_code}",
                 self.zone_id
-            ))),
+            )))
+            },
         }
     }
 

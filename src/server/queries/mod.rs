@@ -1,5 +1,7 @@
+mod monitored_zones;
 mod weather;
 
+pub use monitored_zones::{MonitoredZonesQuery, MonitoredZonesView, MonitoredZonesViewProjection};
 pub use weather::{WeatherQuery, WeatherView, WeatherViewProjection};
 
 use async_trait::async_trait;
@@ -13,7 +15,6 @@ pub struct TracingQuery<A: Aggregate> {
 
 #[async_trait]
 impl<A: Aggregate + std::fmt::Debug> Query<A> for TracingQuery<A> {
-    #[tracing::instrument(level = "debug")]
     async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
             match serde_json::to_string_pretty(&event.payload) {

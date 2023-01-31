@@ -49,25 +49,25 @@ pub trait AggregateState {
     fn apply(&self, event: Self::Event) -> Option<Self::State>;
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Display,
-    EnumString,
-    EnumVariantNames,
-    ToSchema,
-    Serialize,
-    Deserialize,
-)]
-#[strum(serialize_all = "PascalCase", ascii_case_insensitive)]
-pub enum Location {
-    Chicago,
-    Seattle,
-}
+// #[derive(
+//     Debug,
+//     Copy,
+//     Clone,
+//     PartialEq,
+//     Eq,
+//     Hash,
+//     Display,
+//     EnumString,
+//     EnumVariantNames,
+//     ToSchema,
+//     Serialize,
+//     Deserialize,
+// )]
+// #[strum(serialize_all = "PascalCase", ascii_case_insensitive)]
+// pub enum Location {
+//     Chicago,
+//     Seattle,
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ToSchema, Serialize, Deserialize)]
 #[repr(transparent)]

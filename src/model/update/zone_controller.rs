@@ -27,6 +27,7 @@ impl UpdateLocationZoneController {
     }
 }
 
+#[derive(Debug)]
 struct UpdateLocationZoneControllerRef {
     pub noaa: NoaaWeatherServices,
     pub location_tx: mpsc::Sender<queries::CommandEnvelope<LocationZone>>,
@@ -120,6 +121,7 @@ impl Query<UpdateLocations> for UpdateLocationZoneController {
 }
 
 impl UpdateLocationZoneControllerRef {
+    #[tracing::instrument(level="trace", skip())]
     async fn do_update_zone_observation(
         &self, update_saga_id: &str, zone: &LocationZoneCode, metadata: HashMap<String, String>,
     ) {
@@ -132,6 +134,7 @@ impl UpdateLocationZoneControllerRef {
         self.do_send_command(update_saga_id, command).await;
     }
 
+    #[tracing::instrument(level="trace", skip())]
     async fn do_update_zone_forecast(
         &self, update_saga_id: &str, zone: &LocationZoneCode, metadata: HashMap<String, String>,
     ) {
@@ -192,6 +195,7 @@ impl UpdateLocationZoneControllerRef {
     //     //     .collect()
     // }
 
+    #[tracing::instrument(level="trace", skip())]
     async fn do_update_zone_alert(
         &self, update_saga_id: &str, zone: LocationZoneCode, alert: WeatherAlert,
         metadata: HashMap<String, String>,
@@ -205,12 +209,14 @@ impl UpdateLocationZoneControllerRef {
         self.do_send_command(update_saga_id, command).await
     }
 
+    #[tracing::instrument(level="trace", skip())]
     async fn do_send_command(
         &self, update_saga_id: &str, command: queries::CommandEnvelope<LocationZone>,
     ) {
         let zone = LocationZoneCode::new(command.target_id());
         let metadata = command.metadata().clone();
-        let send_outcome = self.location_tx.send(command).await;
+        let send_outcome = self.location_tx.send(command.clone()).await;
+        tracing::debug!(?send_outcome, ?command, "sending command to location aggregate channel");
         if send_outcome.is_err() {
             let command = queries::CommandEnvelope::new_with_metadata(
                 update_saga_id,
@@ -218,7 +224,8 @@ impl UpdateLocationZoneControllerRef {
                 metadata,
             );
 
-            let note_outcome = self.update_tx.send(command).await;
+            let note_outcome = self.update_tx.send(command.clone()).await;
+            tracing::warn!(?note_outcome, ?command, "sending failure note command to update saga channel");
             if let Err(error) = note_outcome {
                 tracing::warn!(
                     ?error,

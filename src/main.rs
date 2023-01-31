@@ -7,9 +7,12 @@ async fn main() -> anyhow::Result<()> {
     weather::tracing::init_subscriber(subscriber);
 
     let options = parse_options();
-    let settings = load_settings(&options)?;
+    let settings = load_settings(&options);
+    tracing::info!("settings = {settings:?}");
+    let settings = settings?;
 
     let server = weather::Server::build(&settings).await?;
+    tracing::info!(?server, "starting server...");
     server.run_until_stopped().await.map_err(|err| err.into())
 }
 
@@ -22,6 +25,7 @@ fn parse_options() -> weather::CliOptions {
     options
 }
 
+#[tracing::instrument(level = "debug")]
 fn load_settings(options: &weather::CliOptions) -> anyhow::Result<weather::Settings> {
     let app_environment = std::env::var(weather::CliOptions::env_app_environment()).ok();
     if app_environment.is_none() {

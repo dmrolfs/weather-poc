@@ -1,8 +1,8 @@
 use super::state::AppState;
 use crate::model::registrar::RegistrarCommand;
-use crate::model::{registrar, RegistrarAggregate};
+use crate::model::{registrar, LocationZoneCode, RegistrarAggregate};
 use crate::server::errors::ApiError;
-use crate::server::queries::{WeatherView, WeatherViewProjection};
+use crate::server::queries::{MonitoredZonesViewProjection, WeatherView, WeatherViewProjection};
 use crate::server::result::OptionalResult;
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
@@ -26,12 +26,20 @@ pub fn api() -> Router<AppState> {
     Router::new()
         .route("/", routing::post(update_weather))
         .route("/:zone", routing::get(serve_location_weather))
+        .route(
+            "/zones",
+            routing::get(serve_all_zones).delete(delete_all_zones),
+        )
+        .route(
+            "/zones/:zone",
+            routing::post(add_forecast_zone).delete(remove_forecast_zone),
+        )
 }
 
 #[utoipa::path(
     post,
     path = "/",
-    context_path = "/api/weather",
+    context_path = "/api/v1/weather",
     tag = "weather",
     responses(
 (status = 200, description = "Initiate services update"),
@@ -39,19 +47,67 @@ pub fn api() -> Router<AppState> {
     ),
 )]
 #[axum::debug_handler]
-#[tracing::instrument(level = "trace", skip(loc_registrar))]
-async fn update_weather(State(loc_registrar): State<RegistrarAggregate>) -> impl IntoResponse {
-    let aggregate_id = registrar::generate_id();
-    loc_registrar
-        .execute(aggregate_id.pretty(), RegistrarCommand::UpdateWeather)
+#[tracing::instrument(level = "debug", skip(reg))]
+async fn update_weather(State(reg): State<RegistrarAggregate>) -> impl IntoResponse {
+    let aggregate_id = registrar::singleton_id();
+    reg.execute(aggregate_id.pretty(), RegistrarCommand::UpdateWeather)
         .await
         .map_err::<ApiError, _>(|err| err.into())
+}
+
+#[tracing::instrument(level = "trace", skip(view_repo))]
+async fn serve_all_zones(
+    State(view_repo): State<MonitoredZonesViewProjection>,
+) -> impl IntoResponse {
+    let registrar_id = registrar::singleton_id();
+    let view = view_repo
+        .load(registrar_id.pretty())
+        .await
+        .map_err::<ApiError, _>(|error| error.into())
+        .map(|v| OptionalResult(v.map(Json)));
+
+    tracing::debug!("view for registrar monitored zones: {view:?}");
+    view
+}
+
+#[tracing::instrument(level = "trace", skip(reg))]
+async fn delete_all_zones(State(reg): State<RegistrarAggregate>) -> impl IntoResponse {
+    let aggregate_id = registrar::singleton_id();
+    reg.execute(aggregate_id.pretty(), RegistrarCommand::ClearZoneMonitoring)
+        .await
+        .map_err::<ApiError, _>(|err| err.into())
+}
+
+#[tracing::instrument(level = "trace", skip(reg))]
+async fn add_forecast_zone(
+    Path(zone_code): Path<LocationZoneCode>, State(reg): State<RegistrarAggregate>,
+) -> impl IntoResponse {
+    let aggregate_id = registrar::singleton_id();
+    reg.execute(
+        aggregate_id.pretty(),
+        RegistrarCommand::MonitorForecastZone(zone_code),
+    )
+    .await
+    .map_err::<ApiError, _>(|err| err.into())
+}
+
+#[tracing::instrument(level = "trace", skip(reg))]
+async fn remove_forecast_zone(
+    Path(zone_code): Path<LocationZoneCode>, State(reg): State<RegistrarAggregate>,
+) -> impl IntoResponse {
+    let aggregate_id = registrar::singleton_id();
+    reg.execute(
+        aggregate_id.pretty(),
+        RegistrarCommand::ForgetForecastZone(zone_code),
+    )
+    .await
+    .map_err::<ApiError, _>(|err| err.into())
 }
 
 #[utoipa::path(
     get,
     path = "/",
-    context_path = "/api/weather",
+    context_path = "/api/v1/weather",
     tag = "weather",
     params(
         ("zone_code" = String, Path, description = "Zone Code"),
@@ -64,10 +120,10 @@ async fn update_weather(State(loc_registrar): State<RegistrarAggregate>) -> impl
 #[axum::debug_handler]
 #[tracing::instrument(level = "debug", skip(view_repo))]
 async fn serve_location_weather(
-    Path(zone_code): Path<String>, State(view_repo): State<WeatherViewProjection>,
+    Path(zone_code): Path<LocationZoneCode>, State(view_repo): State<WeatherViewProjection>,
 ) -> impl IntoResponse {
     let view = view_repo
-        .load(zone_code.as_str())
+        .load(zone_code.as_ref())
         .await
         .map_err::<ApiError, _>(|err| err.into())
         .map(|v| OptionalResult(v.map(Json)));

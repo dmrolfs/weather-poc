@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use cqrs_es::{Aggregate, Query};
+use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::Debug;
@@ -44,6 +44,10 @@ impl<A: Aggregate> EventEnvelope<A> {
         )
     }
 
+    pub fn as_parts(&self) -> (String, A::Event, HashMap<String, String>) {
+        (self.publisher_id().to_string(), self.payload().clone(), self.metadata().clone())
+    }
+
     pub fn publisher_id(&self) -> &str {
         self.inner.publisher_id.as_str()
     }
@@ -73,17 +77,29 @@ impl<A: Aggregate> fmt::Debug for EventEnvelope<A> {
     }
 }
 
-pub struct CommandEnvelope<A: Aggregate> {
+pub struct CommandEnvelope<A>
+where
+    A: Aggregate,
+    A::Command: Debug,
+{
     inner: Arc<CommandEnvelopeRef<A>>,
 }
 
-impl<A: Aggregate> Clone for CommandEnvelope<A> {
+impl<A> Clone for CommandEnvelope<A>
+where
+    A: Aggregate,
+    A::Command: Debug,
+{
     fn clone(&self) -> Self {
         Self { inner: self.inner.clone() }
     }
 }
 
-impl<A: Aggregate> CommandEnvelope<A> {
+impl<A> CommandEnvelope<A>
+where
+    A: Aggregate,
+    A::Command: Debug,
+{
     pub fn new(aggregate_id: impl Into<String>, command: A::Command) -> Self {
         Self::new_with_metadata(aggregate_id, command, HashMap::new())
     }
@@ -113,14 +129,30 @@ impl<A: Aggregate> CommandEnvelope<A> {
     }
 }
 
-struct CommandEnvelopeRef<A: Aggregate> {
+impl<A> CommandEnvelope<A>
+where
+    A: Aggregate,
+    A::Command: Debug + Clone,
+{
+    pub fn as_parts(&self) -> (String, A::Command, HashMap<String, String>) {
+        (self.target_id().to_string(), self.payload().clone(), self.metadata().clone())
+    }
+}
+
+#[derive(Debug)]
+struct CommandEnvelopeRef<A>
+where
+    A: Aggregate,
+    A::Command: Debug,
+{
     pub target_id: String,
     pub command: A::Command,
     pub metadata: HashMap<String, String>,
 }
 
-impl<A: Aggregate> fmt::Debug for CommandEnvelope<A>
+impl<A> fmt::Debug for CommandEnvelope<A>
 where
+    A: Aggregate,
     A::Command: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -129,6 +161,62 @@ where
             .field("payload", &self.inner.command)
             .field("metadata", &self.inner.metadata)
             .finish()
+    }
+}
+
+pub struct CommandRelay<A, ES>
+where
+    A: Aggregate,
+    A::Command: Debug,
+    ES: EventStore<A>,
+{
+    command_rx: mpsc::Receiver<CommandEnvelope<A>>,
+    aggregate: Arc<CqrsFramework<A, ES>>,
+}
+
+impl<A, ES> fmt::Debug for CommandRelay<A, ES>
+where
+    A: Aggregate,
+    A::Command: Debug,
+    ES: EventStore<A>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CommandRelay").finish()
+    }
+}
+
+impl<A, ES> CommandRelay<A, ES>
+    where
+        A: Aggregate,
+        A::Command: Debug,
+        ES: EventStore<A>,
+{
+    pub fn new(aggregate: Arc<CqrsFramework<A, ES>>, command_rx: mpsc::Receiver<CommandEnvelope<A>>) -> Self {
+        Self { command_rx, aggregate, }
+    }
+}
+
+impl<A, ES> CommandRelay<A, ES>
+where
+    A: Aggregate + 'static,
+    A::Command: Debug + Clone + Send + Sync,
+    ES: EventStore<A> + Send + 'static,
+    <ES as EventStore<A>>::AC: Send,
+{
+    pub fn run(self) -> JoinHandle<()> {
+        tokio::spawn(async move { self.do_run().await })
+    }
+
+    async fn do_run(mut self) {
+        while let Some(command) = self.command_rx.recv().await {
+            let (agg_id, cmd, meta) = command.as_parts();
+            match self.aggregate.execute_with_metadata(&agg_id, cmd, meta).await {
+                Ok(()) => tracing::debug!(?command, "command relayed to {}", A::aggregate_type()),
+                Err(error) => {
+                    tracing::error!(?error, ?command, "failed to relay command to {}", A::aggregate_type())
+                },
+            }
+        }
     }
 }
 
@@ -143,7 +231,10 @@ impl<A: Aggregate> fmt::Debug for EventBroadcastQuery<A> {
     }
 }
 
-impl<A: Aggregate> EventBroadcastQuery<A> {
+impl<A> EventBroadcastQuery<A>
+where
+    A: Aggregate + 'static,
+{
     pub fn new(capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
         Self { sender }
@@ -153,9 +244,9 @@ impl<A: Aggregate> EventBroadcastQuery<A> {
         &self, target_tx: mpsc::Sender<CommandEnvelope<S>>, convert_fn: C,
     ) -> EventSubscriber<A, S, C>
     where
-        S: Aggregate,
-        S::Command: Debug + Clone,
-        C: FnMut(EventEnvelope<A>) -> Vec<S::Command> + Send + Sync,
+        S: Aggregate + 'static,
+        <S as Aggregate>::Command: Debug + Clone + Send + Sync,
+        C: FnMut(EventEnvelope<A>) -> Vec<S::Command> + Send + Sync + 'static,
     {
         EventSubscriber::new(self.sender.clone(), target_tx, convert_fn)
     }
@@ -177,11 +268,6 @@ impl<A: Aggregate> Query<A> for EventBroadcastQuery<A> {
             }
         }
     }
-}
-
-pub trait EventForwarder {
-    fn subscriber_admin_tx(&self) -> mpsc::Sender<SubscribeCommand>;
-    fn run(self) -> JoinHandle<()>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -213,15 +299,11 @@ where
 
 impl<P, S, C> EventSubscriber<P, S, C>
 where
-    P: Aggregate,
-    S: Aggregate,
-    S::Command: Debug + Clone,
-    C: FnMut(EventEnvelope<P>) -> Vec<S::Command> + Send + Sync,
+    P: Aggregate + 'static,
+    S: Aggregate + 'static,
+    <S as Aggregate>::Command: Debug + Clone + Send + Sync,
+    C: FnMut(EventEnvelope<P>) -> Vec<S::Command> + Send + Sync + 'static,
 {
-    pub fn event_rx(&self) -> broadcast::Receiver<EventEnvelope<P>> {
-        self.event_tx.subscribe()
-    }
-
     pub fn new(
         event_tx: broadcast::Sender<EventEnvelope<P>>, target_tx: mpsc::Sender<CommandEnvelope<S>>,
         convert_event_fn: C,
@@ -238,51 +320,17 @@ where
             convert_event_fn,
         }
     }
-}
 
-impl<P, S, C> EventForwarder for EventSubscriber<P, S, C>
-where
-    P: Aggregate + 'static,
-    S: Aggregate + 'static,
-    S::Command: Debug + Clone + Send + Sync + 'static,
-    C: FnMut(EventEnvelope<P>) -> Vec<S::Command> + Send + Sync + 'static,
-{
-    fn subscriber_admin_tx(&self) -> mpsc::Sender<SubscribeCommand> {
+    pub fn event_rx(&self) -> broadcast::Receiver<EventEnvelope<P>> {
+        self.event_tx.subscribe()
+    }
+
+    pub fn subscriber_admin_tx(&self) -> mpsc::Sender<SubscribeCommand> {
         self.subscriber_admin_tx.clone()
     }
 
-    fn run(self) -> JoinHandle<()> {
+    pub fn run(self) -> JoinHandle<()> {
         tokio::spawn(async move { self.do_run().await })
-    }
-}
-
-impl<P, S, C> EventSubscriber<P, S, C>
-where
-    P: Aggregate,
-    S: Aggregate,
-    S::Command: Debug + Clone,
-    C: FnMut(EventEnvelope<P>) -> Vec<S::Command> + Send + Sync,
-{
-    fn add_subscriber(&mut self, subscriber_id: String, publisher_ids: HashSet<String>) {
-        for pid in publisher_ids {
-            self.publisher_subscribers
-                .entry(pid)
-                .and_modify(|subscribers| {
-                    subscribers.insert(subscriber_id.clone());
-                })
-                .or_insert(maplit::hashset! { subscriber_id.clone() });
-        }
-    }
-
-    fn remove_subscriber(&mut self, subscriber_id: &str) {
-        let mut nr_subscriptions = 0;
-        for (publisher_id, subscribers) in self.publisher_subscribers.iter_mut() {
-            if subscribers.remove(subscriber_id) {
-                nr_subscriptions += 1;
-            }
-
-            tracing::info!("{publisher_id} event broadcast removed {subscriber_id} from {nr_subscriptions} subscriptions.");
-        }
     }
 
     async fn do_run(mut self) {
@@ -317,6 +365,29 @@ where
             }
         }
     }
+
+    fn add_subscriber(&mut self, subscriber_id: String, publisher_ids: HashSet<String>) {
+        for pid in publisher_ids {
+            self.publisher_subscribers
+                .entry(pid)
+                .and_modify(|subscribers| {
+                    subscribers.insert(subscriber_id.clone());
+                })
+                .or_insert(maplit::hashset! { subscriber_id.clone() });
+        }
+    }
+
+    fn remove_subscriber(&mut self, subscriber_id: &str) {
+        let mut nr_subscriptions = 0;
+        for (publisher_id, subscribers) in self.publisher_subscribers.iter_mut() {
+            if subscribers.remove(subscriber_id) {
+                nr_subscriptions += 1;
+            }
+
+            tracing::info!("{publisher_id} event broadcast removed {subscriber_id} from {nr_subscriptions} subscriptions.");
+        }
+    }
+
 }
 
 impl<P, S, C> EventSubscriber<P, S, C>

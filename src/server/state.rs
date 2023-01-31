@@ -5,8 +5,11 @@ use crate::model::update::{
 };
 use crate::model::zone::{LocationServices, LocationZone, LocationZoneAggregate};
 use crate::model::{UpdateLocations, UpdateLocationsSaga};
-use crate::queries::{self, CommandEnvelope, EventBroadcastQuery, EventForwarder, EventSubscriber};
-use crate::server::queries::{TracingQuery, WeatherQuery, WeatherViewProjection};
+use crate::queries::{self, CommandEnvelope, CommandRelay, EventBroadcastQuery, EventSubscriber};
+use crate::server::queries::{
+    MonitoredZonesQuery, MonitoredZonesViewProjection, TracingQuery, WeatherQuery,
+    WeatherViewProjection,
+};
 use crate::services::noaa::{NoaaWeatherApi, NoaaWeatherServices};
 use axum::extract::FromRef;
 use cqrs_es::Query;
@@ -20,6 +23,7 @@ use tokio::task::JoinHandle;
 use url::Url;
 
 pub const WEATHER_QUERY_VIEW: &str = "weather_query";
+pub const MONITORED_ZONES_QUERY_VIEW: &str = "monitored_zones_query";
 pub const VIEW_PAYLOAD: &str = "payload";
 
 #[derive(Clone)]
@@ -28,7 +32,9 @@ pub struct AppState {
     pub update_locations_agg: UpdateLocationsSaga,
     pub location_agg: LocationZoneAggregate,
     pub weather_view: WeatherViewProjection,
+    pub monitored_zones_view: MonitoredZonesViewProjection,
     pub db_pool: PgPool,
+    pub location_relay_handler: Arc<JoinHandle<()>>,
     pub location_subscriber_handler: Arc<JoinHandle<()>>,
 }
 
@@ -62,13 +68,19 @@ impl FromRef<AppState> for WeatherViewProjection {
     }
 }
 
+impl FromRef<AppState> for MonitoredZonesViewProjection {
+    fn from_ref(app: &AppState) -> Self {
+        app.monitored_zones_view.clone()
+    }
+}
+
 impl FromRef<AppState> for PgPool {
     fn from_ref(app: &AppState) -> Self {
         app.db_pool.clone()
     }
 }
 
-#[tracing::instrument(level = "trace")]
+#[tracing::instrument(level = "debug")]
 pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError> {
     let user_agent = axum::http::HeaderValue::from_str("(here.com, contact@example.com)")
         .expect("invalid user_agent");
@@ -76,7 +88,7 @@ pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError>
     let noaa_api = NoaaWeatherApi::new(base_url, user_agent)?;
     let noaa = NoaaWeatherServices::Noaa(noaa_api);
 
-    let (location_tx, _l_rx) = mpsc::channel(num_cpus::get());
+    let (location_tx, location_rx) = mpsc::channel(num_cpus::get());
     let (update_tx, _u_rx) = mpsc::channel(num_cpus::get());
 
     let location_broadcast_query: EventBroadcastQuery<LocationZone> =
@@ -98,8 +110,14 @@ pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError>
     let (location_agg, weather_view) =
         make_location_zone_aggregate_view(location_broadcast_query, noaa, db_pool.clone());
 
-    let registrar_agg = make_registrar_aggregate(db_pool.clone(), update_locations_agg.clone());
+    let (registrar_agg, registrar_view) = make_registrar_aggregate(
+        db_pool.clone(),
+        location_agg.clone(),
+        update_locations_agg.clone(),
+    );
 
+    let location_relay = CommandRelay::new(location_agg.clone(), location_rx);
+    let location_relay_handler = Arc::new(location_relay.run());
     let location_subscriber_handler = Arc::new(location_subscriber.run());
 
     Ok(AppState {
@@ -107,7 +125,9 @@ pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError>
         update_locations_agg,
         location_agg,
         weather_view,
+        monitored_zones_view: registrar_view,
         db_pool,
+        location_relay_handler,
         location_subscriber_handler,
     })
 }
@@ -155,7 +175,7 @@ fn make_location_zone_aggregate_view(
     ));
     let mut weather_query = WeatherQuery::new(weather_view.clone());
     weather_query.use_error_handler(Box::new(
-        |err| tracing::error!(error=?err, "services query failed"),
+        |err| tracing::error!(error=?err, "weather query failed"),
     ));
 
     let location_queries: Vec<Box<dyn Query<LocationZone>>> = vec![
@@ -169,16 +189,34 @@ fn make_location_zone_aggregate_view(
         location_queries,
         location_services,
     ));
+
     (agg, weather_view)
 }
 
 fn make_registrar_aggregate(
-    db_pool: PgPool, update_saga: UpdateLocationsSaga,
-) -> RegistrarAggregate {
-    Arc::new(postgres_es::postgres_cqrs(
+    db_pool: PgPool, location_agg: LocationZoneAggregate, update_saga: UpdateLocationsSaga,
+) -> (RegistrarAggregate, MonitoredZonesViewProjection) {
+    let monitored_zones_view = Arc::new(PostgresViewRepository::new(
+        MONITORED_ZONES_QUERY_VIEW,
+        db_pool.clone(),
+    ));
+    let mut monitored_zones_query = MonitoredZonesQuery::new(monitored_zones_view.clone());
+    monitored_zones_query.use_error_handler(Box::new(|error| {
+        tracing::error!(?error, "monitored zones query failed")
+    }));
+
+    let agg = Arc::new(postgres_es::postgres_cqrs(
         db_pool,
-        vec![Box::<TracingQuery<Registrar>>::default()],
+        vec![
+            Box::<TracingQuery<Registrar>>::default(),
+            Box::new(monitored_zones_query),
+        ],
         // vec![Box::new(TracingQuery::<Registrar>::default())],
-        RegistrarServices::Saga(registrar::StartUpdateLocationsServices::new(update_saga)),
-    ))
+        RegistrarServices::Full(registrar::FullRegistrarServices::new(
+            location_agg,
+            update_saga,
+        )),
+    ));
+
+    (agg, monitored_zones_view)
 }

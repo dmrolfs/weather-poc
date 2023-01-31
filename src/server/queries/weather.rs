@@ -58,7 +58,7 @@ impl View<LocationZone> for WeatherView {
         use LocationZoneEvent as Evt;
 
         match &event.payload {
-            Evt::ZoneSet(_zone_type, zone_id) => {
+            Evt::ZoneSet(zone_id) => {
                 self.zone_code = zone_id.to_string();
             },
 
