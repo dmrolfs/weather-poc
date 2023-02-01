@@ -1,6 +1,7 @@
 mod agg_connect;
 mod frame;
 pub mod registrar;
+mod tracing_query;
 pub mod update;
 pub mod zone;
 
@@ -10,6 +11,7 @@ pub use agg_connect::{
 };
 pub use frame::WeatherFrame;
 pub use registrar::{Registrar, RegistrarAggregate};
+pub use tracing_query::TracingQuery;
 pub use update::{UpdateLocations, UpdateLocationsSaga};
 pub use zone::{LocationZone, LocationZoneAggregate};
 

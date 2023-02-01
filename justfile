@@ -22,6 +22,9 @@ update:
   cargo upgrade --workspace
   cargo update
 
+init-db:
+  ./scripts/init_db.sh
+
 run:
   RUST_BACKTRACE=full RUST_LOG="info,weather=trace" cargo run -- --secrets ./resources/secrets.yaml | bunyan
 

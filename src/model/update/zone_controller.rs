@@ -52,17 +52,17 @@ impl Query<UpdateLocations> for UpdateLocationZoneController {
                 let zones = zones.clone();
                 let metadata = metadata.clone();
 
-                // self.inner.clone().do_spawn_update_observations(
-                //     saga_id.as_str(),
-                //     zones.as_slice(),
-                //     &metadata,
-                // );
-                //
-                // self.inner.clone().do_spawn_update_forecasts(
-                //     saga_id.as_str(),
-                //     zones.as_slice(),
-                //     &metadata,
-                // );
+                self.inner.clone().do_spawn_update_observations(
+                    saga_id.as_str(),
+                    zones.as_slice(),
+                    &metadata,
+                );
+
+                self.inner.clone().do_spawn_update_forecasts(
+                    saga_id.as_str(),
+                    zones.as_slice(),
+                    &metadata,
+                );
 
                 let inner_ref = self.inner.clone();
                 tokio::spawn(async move {
@@ -114,12 +114,16 @@ impl UpdateLocationZoneControllerRef {
         self: Arc<Self>, update_saga_id: &str, zones: &[LocationZoneCode],
         metadata: &HashMap<String, String>,
     ) {
-        let update_zones: HashSet<_> = zones.iter().collect();
+        let update_zones: HashSet<_> = zones.iter().cloned().collect();
+        let mut alerted_zones = HashSet::with_capacity(update_zones.len());
 
-        for alert in self.do_get_alerts().await {
+        let alerts = self.do_get_alerts().await;
+        let nr_alerts = alerts.len();
+        for alert in alerts {
             let update_affected = alert.affected_zones.iter().filter(|z| update_zones.contains(z));
 
             for affected in update_affected.cloned() {
+                alerted_zones.insert(affected.clone());
                 let self_ref = self.clone();
                 let saga_id = update_saga_id.to_string();
                 let alert = alert.clone();
@@ -128,6 +132,24 @@ impl UpdateLocationZoneControllerRef {
                     tracing::debug!(?alert, "spawning alert update on {affected} zone..");
                     self_ref.do_update_zone_alert(&saga_id, affected, alert, metadata).await;
                 });
+            }
+        }
+
+        let unaffected: Vec<_> = update_zones.difference(&alerted_zones).cloned().collect();
+        tracing::info!(?alerted_zones, ?unaffected, %nr_alerts, "DMR: finishing alerting with unaffected notes..");
+        for zone in unaffected {
+            let metadata = metadata.clone();
+            let command = model::CommandEnvelope::new_with_metadata(
+                update_saga_id,
+                UpdateLocationsCommand::NoteLocationAlertStatusUpdated(zone.clone()),
+                metadata.clone(),
+            );
+            let outcome = self.update_tx.send(command.clone()).await;
+            if let Err(error) = outcome {
+                tracing::error!(
+                    ?error,
+                    "failed to update saga on zone unaffected by alert status: {command:?}"
+                );
             }
         }
     }

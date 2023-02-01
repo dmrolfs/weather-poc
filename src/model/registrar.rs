@@ -1,15 +1,21 @@
 pub use errors::RegistrarError;
 pub use protocol::{RegistrarCommand, RegistrarEvent};
+pub use queries::{
+    MonitoredZonesQuery, MonitoredZonesView, MonitoredZonesViewProjection,
+    MONITORED_ZONES_QUERY_VIEW,
+};
 pub use service::{FullRegistrarServices, HappyPathServices, RegistrarServices};
 
-use crate::model::LocationZoneCode;
+use super::{registrar, LocationZoneAggregate, LocationZoneCode, UpdateLocationsSaga};
+use crate::model::TracingQuery;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use once_cell::sync::Lazy;
-use postgres_es::PostgresCqrs;
+use postgres_es::{PostgresCqrs, PostgresViewRepository};
 use pretty_snowflake::{Id, Label, Labeling};
 use serde::{Deserialize, Serialize};
 use service::RegistrarApi;
+use sqlx::PgPool;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -26,6 +32,34 @@ static REGISTRAR_SINGLETON_ID: Lazy<Id<Registrar>> = Lazy::new(|| {
         REGISTRAR_PRETTY_ID,
     )
 });
+
+pub fn make_registrar_aggregate(
+    db_pool: PgPool, location_agg: LocationZoneAggregate, update_saga: UpdateLocationsSaga,
+) -> (RegistrarAggregate, MonitoredZonesViewProjection) {
+    let monitored_zones_view = Arc::new(PostgresViewRepository::new(
+        MONITORED_ZONES_QUERY_VIEW,
+        db_pool.clone(),
+    ));
+    let mut monitored_zones_query = MonitoredZonesQuery::new(monitored_zones_view.clone());
+    monitored_zones_query.use_error_handler(Box::new(|error| {
+        tracing::error!(?error, "monitored zones query failed")
+    }));
+
+    let agg = Arc::new(postgres_es::postgres_cqrs(
+        db_pool,
+        vec![
+            Box::<TracingQuery<Registrar>>::default(),
+            Box::new(monitored_zones_query),
+        ],
+        // vec![Box::new(TracingQuery::<Registrar>::default())],
+        RegistrarServices::Full(registrar::FullRegistrarServices::new(
+            location_agg,
+            update_saga,
+        )),
+    ));
+
+    (agg, monitored_zones_view)
+}
 
 #[inline]
 pub fn singleton_id() -> Id<Registrar> {
@@ -233,6 +267,48 @@ mod protocol {
 
         fn event_version(&self) -> String {
             VERSION.to_string()
+        }
+    }
+}
+
+mod queries {
+    use crate::model::{LocationZoneCode, Registrar};
+    use cqrs_es::persist::GenericQuery;
+    use cqrs_es::{EventEnvelope, View};
+    use postgres_es::PostgresViewRepository;
+    use serde::{Deserialize, Serialize};
+    use std::collections::HashSet;
+    use std::sync::Arc;
+    use utoipa::ToSchema;
+
+    pub const MONITORED_ZONES_QUERY_VIEW: &str = "monitored_zones_query";
+    pub type MonitoredZonesRepository = PostgresViewRepository<MonitoredZonesView, Registrar>;
+    pub type MonitoredZonesViewProjection = Arc<MonitoredZonesRepository>;
+
+    pub type MonitoredZonesQuery =
+        GenericQuery<MonitoredZonesRepository, MonitoredZonesView, Registrar>;
+
+    #[derive(Debug, Default, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct MonitoredZonesView {
+        pub zones: HashSet<LocationZoneCode>,
+    }
+
+    impl View<Registrar> for MonitoredZonesView {
+        fn update(&mut self, event: &EventEnvelope<Registrar>) {
+            use super::RegistrarEvent as Evt;
+
+            match &event.payload {
+                Evt::ForecastZoneAdded(zone) => {
+                    self.zones.insert(zone.clone());
+                },
+                Evt::ForecastZoneForgotten(zone) => {
+                    self.zones.remove(zone);
+                },
+                Evt::AllForecastZonesForgotten => {
+                    self.zones.clear();
+                },
+            }
         }
     }
 }

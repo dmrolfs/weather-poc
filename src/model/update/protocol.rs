@@ -29,7 +29,6 @@ pub enum UpdateLocationsCommand {
     NoteLocationForecastUpdated(LocationZoneCode),
     NoteLocationAlertStatusUpdated(LocationZoneCode),
     NoteLocationUpdateFailure(LocationZoneCode),
-    // NoteLocationUpdate(LocationZoneCode, ZoneUpdateStatus),
 }
 
 const VERSION: &str = "1.0";

@@ -1,0 +1,194 @@
+{
+	"@context": [
+		"https://geojson.org/geojson-ld/geojson-context.jsonld",
+		{
+			"@version": "1.1",
+			"wx": "https://api.weather.gov/ontology#",
+			"@vocab": "https://api.weather.gov/ontology#"
+		}
+	],
+	"type": "FeatureCollection",
+	"features": [
+		{
+			"id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.423f567fa3787de06bb58b9962c4f2134cd1cbbe.002.1",
+			"type": "Feature",
+			"geometry": null,
+			"properties": {
+				"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.423f567fa3787de06bb58b9962c4f2134cd1cbbe.002.1",
+				"@type": "wx:Alert",
+				"id": "urn:oid:2.49.0.1.840.0.423f567fa3787de06bb58b9962c4f2134cd1cbbe.002.1",
+				"areaDesc": "Livingston; Marshall; Calloway; Crittenden; Lyon; Trigg; Caldwell; Hopkins; Christian; Muhlenberg; Todd",
+				"geocode": {
+					"SAME": [ "021139", "021157", "021035", "021055", "021143", "021221","021033", "021107", "021047", "021177", "021219" ],
+					"UGC": [ "KYZ007", "KYZ008", "KYZ009", "KYZ010", "KYZ011", "KYZ012", "KYZ013", "KYZ016", "KYZ017", "KYZ021", "KYZ022" ]
+				},
+				"affectedZones": [
+					"https://api.weather.gov/zones/forecast/KYZ007",
+					"https://api.weather.gov/zones/forecast/KYZ008",
+					"https://api.weather.gov/zones/forecast/KYZ009",
+					"https://api.weather.gov/zones/forecast/KYZ010",
+					"https://api.weather.gov/zones/forecast/KYZ011",
+					"https://api.weather.gov/zones/forecast/KYZ012",
+					"https://api.weather.gov/zones/forecast/KYZ013",
+					"https://api.weather.gov/zones/forecast/KYZ016",
+					"https://api.weather.gov/zones/forecast/KYZ017",
+					"https://api.weather.gov/zones/forecast/KYZ021",
+					"https://api.weather.gov/zones/forecast/KYZ022"
+				],
+				"references": [
+					{
+						"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.d71c16355176c2d5673445e3d94d0dd65402c1f9.001.1",
+						"identifier": "urn:oid:2.49.0.1.840.0.d71c16355176c2d5673445e3d94d0dd65402c1f9.001.1",
+						"sender": "w-nws.webmaster@noaa.gov",
+						"sent": "2023-01-31T14:41:00-06:00"
+					},
+					{
+						"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.d71c16355176c2d5673445e3d94d0dd65402c1f9.002.1",
+						"identifier": "urn:oid:2.49.0.1.840.0.d71c16355176c2d5673445e3d94d0dd65402c1f9.002.1",
+						"sender": "w-nws.webmaster@noaa.gov",
+						"sent": "2023-01-31T14:41:00-06:00"
+					},
+					{
+						"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.8c9dcb48446109fdfdd9358b7b14d6d67a5dcf94.002.1",
+						"identifier": "urn:oid:2.49.0.1.840.0.8c9dcb48446109fdfdd9358b7b14d6d67a5dcf94.002.1",
+						"sender": "w-nws.webmaster@noaa.gov",
+						"sent": "2023-01-31T14:53:00-06:00"
+					},
+					{
+						"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.8c9dcb48446109fdfdd9358b7b14d6d67a5dcf94.001.1",
+						"identifier": "urn:oid:2.49.0.1.840.0.8c9dcb48446109fdfdd9358b7b14d6d67a5dcf94.001.1",
+						"sender": "w-nws.webmaster@noaa.gov",
+						"sent": "2023-01-31T14:53:00-06:00"
+					},
+					{
+						"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.276640fd13e0abf5dd6576a418d757c34abba9d6.001.1",
+						"identifier": "urn:oid:2.49.0.1.840.0.276640fd13e0abf5dd6576a418d757c34abba9d6.001.1",
+						"sender": "w-nws.webmaster@noaa.gov",
+						"sent": "2023-01-31T16:40:00-06:00"
+					},
+					{
+						"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.78c795a15e0ae1ff156ef48c040552a075e396bf.002.1",
+						"identifier": "urn:oid:2.49.0.1.840.0.78c795a15e0ae1ff156ef48c040552a075e396bf.002.1",
+						"sender": "w-nws.webmaster@noaa.gov",
+						"sent": "2023-01-31T18:19:00-06:00"
+					}
+				],
+				"sent": "2023-01-31T20:23:00-06:00",
+				"effective": "2023-01-31T20:23:00-06:00",
+				"onset": "2023-01-31T20:23:00-06:00",
+				"expires": "2023-01-31T22:00:00-06:00",
+				"ends": "2023-01-31T22:00:00-06:00",
+				"status": "Actual",
+				"messageType": "Update",
+				"category": "Met",
+				"severity": "Moderate",
+				"certainty": "Likely",
+				"urgency": "Expected",
+				"event": "Winter Weather Advisory",
+				"sender": "w-nws.webmaster@noaa.gov",
+				"senderName": "NWS Paducah KY",
+				"headline": "Winter Weather Advisory issued January 31 at 8:23PM CST until January 31 at 10:00PM CST by NWS Paducah KY",
+				"description": "* WHAT...Light freezing rain, sleet and light snow. Additional\nminor accumulations of sleet, snow and light glaze of ice.\n\n* WHERE...Portions of western Kentucky.\n\n* WHEN...Until 10 PM CST this evening.\n\n* IMPACTS...Plan on dangerous road conditions. The hazardous\nconditions will impact the evening commute.\n\n* ADDITIONAL DETAILS...The light wintry precipitation will\ncontinue to diminish through 10 PM. Expect dangerous travel\nconditions to persist overnight, especially on secondary and\nrural roads. Use extreme caution if you must travel overnight.",
+				"instruction": "Slow down and use caution while traveling. Prepare for possible\npower outages.",
+				"response": "Execute",
+				"parameters": {
+					"AWIPSidentifier": [ "WSWPAH" ],
+					"WMOidentifier": [ "WWUS43 KPAH 010223" ],
+					"NWSheadline": [ "WINTER WEATHER ADVISORY REMAINS IN EFFECT UNTIL 10 PM CST THIS EVENING" ],
+					"BLOCKCHANNEL": [ "EAS", "NWEM", "CMAS" ],
+					"VTEC": [ "/O.CON.KPAH.WW.Y.0004.000000T0000Z-230201T0400Z/" ],
+					"eventEndingTime": [ "2023-02-01T04:00:00+00:00" ],
+					"expiredReferences": [
+						"w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.54d6fcf48dcdeb149ec8708876d76a547444910b.001.1,2023-01-31T10:20:00-06:00"
+					]
+				}
+			}
+		},
+		{
+			"id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.b9a4b4df2f1cc7a2cab7201fed1ac0b6baf92335.002.1",
+			"type": "Feature",
+			"geometry": null,
+			"properties": {
+				"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.b9a4b4df2f1cc7a2cab7201fed1ac0b6baf92335.002.1",
+				"@type": "wx:Alert",
+				"id": "urn:oid:2.49.0.1.840.0.b9a4b4df2f1cc7a2cab7201fed1ac0b6baf92335.002.1",
+				"areaDesc": "Estill; Rockcastle; Jackson; Pulaski; Laurel; Wayne; McCreary; Whitley; Knox; Bell; Harlan; Johnson; Magoffin; Floyd; Lee; Breathitt; Knott; Owsley; Perry; Clay; Leslie; Letcher; Martin; Pike",
+				"geocode": {
+					"SAME": [
+						"021065", "021203", "021109", "021199", "021125", "021231", "021147", "021235", "021121", "021013", "021095", "021115", "021153", "021071", 
+						"021129", "021025", "021119", "021189", "021193", "021051", "021131", "021133", "021159", "021195"
+					],
+					"UGC": [
+						"KYZ058", "KYZ068", "KYZ069", "KYZ079", "KYZ080", "KYZ083", "KYZ084", "KYZ085", "KYZ086", "KYZ087", "KYZ088", "KYZ107",
+						"KYZ109", "KYZ110", "KYZ111", "KYZ112", "KYZ113", "KYZ114", "KYZ115", "KYZ116", "KYZ117", "KYZ118", "KYZ119", "KYZ120"
+					]
+				},
+				"affectedZones": [
+					"https://api.weather.gov/zones/forecast/KYZ058",
+					"https://api.weather.gov/zones/forecast/KYZ068",
+					"https://api.weather.gov/zones/forecast/KYZ069",
+					"https://api.weather.gov/zones/forecast/KYZ079",
+					"https://api.weather.gov/zones/forecast/KYZ080",
+					"https://api.weather.gov/zones/forecast/KYZ083",
+					"https://api.weather.gov/zones/forecast/KYZ084",
+					"https://api.weather.gov/zones/forecast/KYZ085",
+					"https://api.weather.gov/zones/forecast/KYZ086",
+					"https://api.weather.gov/zones/forecast/KYZ087",
+					"https://api.weather.gov/zones/forecast/KYZ088",
+					"https://api.weather.gov/zones/forecast/KYZ107",
+					"https://api.weather.gov/zones/forecast/KYZ109",
+					"https://api.weather.gov/zones/forecast/KYZ110",
+					"https://api.weather.gov/zones/forecast/KYZ111",
+					"https://api.weather.gov/zones/forecast/KYZ112",
+					"https://api.weather.gov/zones/forecast/KYZ113",
+					"https://api.weather.gov/zones/forecast/KYZ114",
+					"https://api.weather.gov/zones/forecast/KYZ115",
+					"https://api.weather.gov/zones/forecast/KYZ116",
+					"https://api.weather.gov/zones/forecast/KYZ117",
+					"https://api.weather.gov/zones/forecast/KYZ118",
+					"https://api.weather.gov/zones/forecast/KYZ119",
+					"https://api.weather.gov/zones/forecast/KYZ120"
+				],
+				"references": [
+					{
+						"@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.27a52398e7067f2b1bf8ef26379ba99a868997aa.001.1",
+						"identifier": "urn:oid:2.49.0.1.840.0.27a52398e7067f2b1bf8ef26379ba99a868997aa.001.1",
+						"sender": "w-nws.webmaster@noaa.gov",
+						"sent": "2023-01-31T17:50:00-05:00"
+					}
+				],
+				"sent": "2023-01-31T21:20:00-05:00",
+				"effective": "2023-01-31T21:20:00-05:00",
+				"onset": "2023-01-31T21:20:00-05:00",
+				"expires": "2023-02-01T05:30:00-05:00",
+				"ends": "2023-02-01T10:00:00-05:00",
+				"status": "Actual",
+				"messageType": "Update",
+				"category": "Met",
+				"severity": "Moderate",
+				"certainty": "Likely",
+				"urgency": "Expected",
+				"event": "Winter Weather Advisory",
+				"sender": "w-nws.webmaster@noaa.gov",
+				"senderName": "NWS Jackson KY",
+				"headline": "Winter Weather Advisory issued January 31 at 9:20PM EST until February 1 at 10:00AM EST by NWS Jackson KY",
+				"description": "AAA\n\n* WHAT...A wintery mix of freezing rain, sleet, and snow is\nexpected tonight into Wednesday morning. Anticipate total snow\naccumulations of a half inch or less and ice accumulations of\none tenth of an inch or less.\n\n* WHERE...Portions of east central, northeast, south central and\nsoutheast Kentucky.\n\n* WHEN...Until 10 AM EST Wednesday.\n\n* IMPACTS...Bridges and untreated roads may become icy and slick.\nSlippery conditions could affect the morning commute.",
+				"instruction": "Slow down and use caution while traveling.\n\nThe latest road conditions for Kentucky can be found by visiting\nhttps://goky.ky.gov.",
+				"response": "Execute",
+				"parameters": {
+					"AWIPSidentifier": ["WSWJKL"],
+					"WMOidentifier": ["WWUS43 KJKL 010220 AAA"],
+					"NWSheadline": ["WINTER WEATHER ADVISORY REMAINS IN EFFECT UNTIL 10 AM EST WEDNESDAY"],
+					"BLOCKCHANNEL": ["EAS", "NWEM", "CMAS"],
+					"VTEC": ["/O.CON.KJKL.WW.Y.0004.000000T0000Z-230201T1500Z/"],
+					"eventEndingTime": ["2023-02-01T15:00:00+00:00"],
+					"expiredReferences": [
+						"w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.e028806eb99a6d952ac2af801914b972ed433c85.001.2,2023-01-31T12:59:00-05:00 w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.e028806eb99a6d952ac2af801914b972ed433c85.003.1,2023-01-31T12:59:00-05:00"
+					]
+				}
+			}
+		}
+	],
+	"title": "current watches, warnings, and advisories",
+	"updated": "2023-02-01T02:24:06+00:00"
+}                                                                                                                                                                                                                             

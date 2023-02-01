@@ -1,9 +1,3 @@
-mod monitored_zones;
-mod weather;
-
-pub use monitored_zones::{MonitoredZonesQuery, MonitoredZonesView, MonitoredZonesViewProjection};
-pub use weather::{WeatherQuery, WeatherView, WeatherViewProjection};
-
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, EventEnvelope, Query};
 use std::marker::PhantomData;

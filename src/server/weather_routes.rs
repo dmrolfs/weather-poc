@@ -1,10 +1,12 @@
 use super::state::AppState;
-use crate::model::registrar::RegistrarCommand;
+use crate::model::registrar::{MonitoredZonesViewProjection, RegistrarCommand};
+use crate::model::update::UpdateLocationsViewProjection;
+use crate::model::zone::{WeatherView, WeatherViewProjection};
 use crate::model::{registrar, LocationZoneCode, RegistrarAggregate};
 use crate::server::errors::ApiError;
-use crate::server::queries::{MonitoredZonesViewProjection, WeatherView, WeatherViewProjection};
 use crate::server::result::OptionalResult;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{routing, Json, Router};
 use cqrs_es::persist::ViewRepository;
@@ -25,6 +27,7 @@ pub struct WeatherApiDoc;
 pub fn api() -> Router<AppState> {
     Router::new()
         .route("/", routing::post(update_weather))
+        .route("/updates/:update_id", routing::get(serve_update_state))
         .route("/:zone", routing::get(serve_location_weather))
         .route(
             "/zones",
@@ -53,6 +56,18 @@ async fn update_weather(State(reg): State<RegistrarAggregate>) -> impl IntoRespo
     reg.execute(aggregate_id.pretty(), RegistrarCommand::UpdateWeather)
         .await
         .map_err::<ApiError, _>(|err| err.into())
+        .map(move |()| (StatusCode::OK, aggregate_id.pretty().to_string()))
+}
+
+#[axum::debug_handler]
+async fn serve_update_state(
+    Path(update_id): Path<String>, State(view_repo): State<UpdateLocationsViewProjection>,
+) -> impl IntoResponse {
+    view_repo
+        .load(&update_id)
+        .await
+        .map_err::<ApiError, _>(|error| error.into())
+        .map(|v| OptionalResult(v.map(Json)))
 }
 
 #[tracing::instrument(level = "trace", skip(view_repo))]

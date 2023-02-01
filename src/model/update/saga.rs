@@ -53,7 +53,7 @@ impl Aggregate for UpdateLocations {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-enum UpdateLocationsState {
+pub enum UpdateLocationsState {
     Quiescent(QuiescentLocationsUpdate),
     Active(ActiveLocationsUpdate),
     Finished(FinishedLocationsUpdate),
@@ -95,7 +95,7 @@ impl AggregateState for UpdateLocationsState {
 // -- Quiescent
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-struct QuiescentLocationsUpdate;
+pub struct QuiescentLocationsUpdate;
 
 #[async_trait]
 impl AggregateState for QuiescentLocationsUpdate {
@@ -187,7 +187,7 @@ impl LocationUpdateStatusExt for LocationUpdateStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct ActiveLocationsUpdate {
+pub struct ActiveLocationsUpdate {
     pub aggregate_id: Id<UpdateLocations>,
     pub location_statuses: HashMap<LocationZoneCode, LocationUpdateStatus>,
 }
@@ -256,35 +256,10 @@ impl AggregateState for ActiveLocationsUpdate {
 }
 
 impl ActiveLocationsUpdate {
-    // #[tracing::instrument(level = "debug")]
-    // async fn start_update_locations(
-    //     locations: Vec<LocationZoneIdentifier>,
-    // ) -> Result<Vec<UpdateLocationsEvent>, UpdateLocationsError> {
-    //     // let actions: Vec<_> = locations
-    //     //     .into_iter()
-    //     //     .map(|zone| {
-    //     //         service.update_zone_weather(&zone)
-    //     //             .map(|status| {
-    //     //                 let zone_status = match status {
-    //     //                     Ok(()) => ZoneUpdateStatus::Started,
-    //     //                     Err(error) => {
-    //     //                         tracing::warn!(?error, %zone, "failed to initiate zone weather update.");
-    //     //                         ZoneUpdateStatus::Failed
-    //     //                     },
-    //     //                 };
-    //     //                 (zone, zone_status)
-    //     //             })
-    //     //     })
-    //     //     .collect();
-    //     //
-    //     // let updates = futures::future::join_all(actions).await.into_iter().collect();
-    //     Ok(vec![UpdateLocationsEvent::Started(locations)])
-    // }
-
     #[tracing::instrument(level = "debug")]
     fn handle_location_update(
         &self, zone: LocationZoneCode, step: LocationUpdatedStep,
-        services: &UpdateLocationsServices,
+        _services: &UpdateLocationsServices,
     ) -> Result<Vec<UpdateLocationsEvent>, UpdateLocationsError> {
         use UpdateLocationsEvent as Evt;
 
@@ -295,13 +270,18 @@ impl ActiveLocationsUpdate {
             .unwrap_or(&DEFAULT_LOCATION_UPDATE_STATUS)
             .left();
 
+        tracing::debug!(status=?self.location_statuses, "is {zone} only active: {}", self.is_only_active_zone(&zone));
+
         let events = match (previous, step) {
             (None, _) => vec![],
             (Some(previous), current) if previous.contains(current) => vec![],
             (Some(mut zone_steps), current) if self.is_only_active_zone(&zone) => {
                 zone_steps.toggle(current);
                 if zone_steps.is_all() {
-                    vec![Evt::LocationUpdated(zone, Left(zone_steps)), Evt::Completed]
+                    vec![
+                        Evt::LocationUpdated(zone, Right(UpdateCompletionStatus::Succeeded)),
+                        Evt::Completed,
+                    ]
                 } else {
                     vec![Evt::LocationUpdated(zone, Left(zone_steps))]
                 }
@@ -309,7 +289,10 @@ impl ActiveLocationsUpdate {
             (Some(mut zone_steps), current) => {
                 zone_steps.toggle(current);
                 if zone_steps.is_all() {
-                    vec![Evt::LocationUpdated(zone, Left(zone_steps)), Evt::Completed]
+                    vec![Evt::LocationUpdated(
+                        zone,
+                        Right(UpdateCompletionStatus::Succeeded),
+                    )]
                 } else {
                     vec![Evt::LocationUpdated(zone, Left(zone_steps))]
                 }
@@ -345,28 +328,23 @@ impl ActiveLocationsUpdate {
         Ok(events)
     }
 
-    // fn any_status_of(&self, status: ZoneUpdateStatus) -> bool {
-    //     self.location_statuses.iter().any(|(_, s)| *s == status)
-    // }
-
     fn is_only_active_zone(&self, zone: &LocationZoneCode) -> bool {
         self.location_statuses
             .get(zone)
             .map(|status| {
-                if status.is_active() {
-                    let nr_active =
-                        self.location_statuses.values().filter(|s| s.is_active()).count();
-                    nr_active == 1
-                } else {
-                    false
-                }
+                status.is_active()
+                    && !self
+                        .location_statuses
+                        .iter()
+                        .filter_map(|(z, s)| if z == zone { None } else { Some(s.is_left()) })
+                        .any(|is_active| is_active)
             })
             .unwrap_or(false)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct FinishedLocationsUpdate;
+pub struct FinishedLocationsUpdate;
 
 #[async_trait]
 impl AggregateState for FinishedLocationsUpdate {

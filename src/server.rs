@@ -1,13 +1,13 @@
 mod errors;
 mod health_routes;
-mod queries;
 mod result;
 mod state;
 mod weather_routes;
 
+pub use result::HttpResult;
+
 use crate::settings::HttpApiSettings;
 use crate::Settings;
-pub use result::HttpResult;
 use std::fmt;
 
 use axum::error_handling::HandleErrorLayer;

@@ -1,5 +1,6 @@
-use super::state::{AppState, WEATHER_QUERY_VIEW};
-use crate::server::state::MONITORED_ZONES_QUERY_VIEW;
+use super::state::AppState;
+use crate::model::registrar::MONITORED_ZONES_QUERY_VIEW;
+use crate::model::zone::WEATHER_QUERY_VIEW;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;

@@ -1,4 +1,3 @@
-use crate::model::zone::LocationZoneEvent;
 use crate::model::{ForecastDetail, LocationZone, WeatherAlert, WeatherFrame};
 use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, View};
@@ -7,6 +6,8 @@ use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
+
+pub const WEATHER_QUERY_VIEW: &str = "weather_query";
 
 pub type WeatherViewRepository = PostgresViewRepository<WeatherView, LocationZone>;
 pub type WeatherViewProjection = Arc<WeatherViewRepository>;
@@ -55,7 +56,7 @@ impl WeatherView {
 // Updates the CQRS view from events as they are committed
 impl View<LocationZone> for WeatherView {
     fn update(&mut self, event: &EventEnvelope<LocationZone>) {
-        use LocationZoneEvent as Evt;
+        use super::LocationZoneEvent as Evt;
 
         match &event.payload {
             Evt::ZoneSet(zone_id) => {
