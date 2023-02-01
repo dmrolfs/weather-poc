@@ -1,5 +1,4 @@
-use crate::model::{LocationZoneCode, WeatherAlert};
-use crate::queries::SubscribeCommand;
+use crate::model::{LocationZoneCode, SubscribeCommand, WeatherAlert};
 use crate::services::noaa::{AlertApi, NoaaWeatherError, NoaaWeatherServices};
 use async_trait::async_trait;
 use std::sync::Arc;

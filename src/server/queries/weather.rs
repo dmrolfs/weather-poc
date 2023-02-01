@@ -63,7 +63,7 @@ impl View<LocationZone> for WeatherView {
             },
 
             Evt::ObservationAdded(frame) => {
-                self.current = Some(frame.clone());
+                self.current = Some(*frame.clone());
             },
 
             Evt::ForecastUpdated(forecast) => {

@@ -3,7 +3,6 @@
 
 mod errors;
 mod model;
-mod queries;
 mod server;
 mod services;
 mod settings;

@@ -1,6 +1,5 @@
 use crate::model::update::saga::LocationUpdateStatus;
-use crate::model::{LocationZone, LocationZoneCode, UpdateLocations};
-use crate::queries::EventEnvelope;
+use crate::model::{EventEnvelope, LocationZone, LocationZoneCode, UpdateLocations};
 use cqrs_es::DomainEvent;
 use pretty_snowflake::Id;
 use serde::{Deserialize, Serialize};

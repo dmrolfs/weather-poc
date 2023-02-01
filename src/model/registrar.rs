@@ -162,14 +162,10 @@ mod service {
 
         #[tracing::instrument(level = "debug", skip(self))]
         async fn update_weather(&self, zones: &[&LocationZoneCode]) -> Result<(), RegistrarError> {
-            // let mut zone_ids = Vec::with_capacity(zones.len());
-            // let mut events = Vec::with_capacity(zones.len());
-            // for (location, zone_id) in zones {
-            //     let location = *(*location);
-            //     let zone_id = (*zone_id).clone();
-            //     events.push(RegistrarEvent::LocationAdded(location, zone_id.clone()));
-            //     zone_ids.push(zone_id);
-            // }
+            if zones.is_empty() {
+                return Ok(());
+            }
+
             let zone_ids = zones.iter().copied().cloned().collect();
 
             let saga_id = crate::model::update::generate_id();

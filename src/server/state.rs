@@ -4,8 +4,9 @@ use crate::model::update::{
     UpdateLocationZoneController, UpdateLocationsCommand, UpdateLocationsServices,
 };
 use crate::model::zone::{LocationServices, LocationZone, LocationZoneAggregate};
-use crate::model::{UpdateLocations, UpdateLocationsSaga};
-use crate::queries::{self, CommandEnvelope, CommandRelay, EventBroadcastQuery, EventSubscriber};
+use crate::model::{
+    self, CommandRelay, EventBroadcastQuery, EventSubscriber, UpdateLocations, UpdateLocationsSaga,
+};
 use crate::server::queries::{
     MonitoredZonesQuery, MonitoredZonesViewProjection, TracingQuery, WeatherQuery,
     WeatherViewProjection,
@@ -133,16 +134,16 @@ pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError>
 }
 
 async fn make_update_locations_saga<C>(
-    location_tx: mpsc::Sender<CommandEnvelope<LocationZone>>,
+    location_tx: mpsc::Sender<model::CommandEnvelope<LocationZone>>,
     (update_tx, update_rx): (
-        mpsc::Sender<CommandEnvelope<UpdateLocations>>,
-        mpsc::Receiver<CommandEnvelope<UpdateLocations>>,
+        mpsc::Sender<model::CommandEnvelope<UpdateLocations>>,
+        mpsc::Receiver<model::CommandEnvelope<UpdateLocations>>,
     ),
     location_subscriber: &EventSubscriber<LocationZone, UpdateLocations, C>,
     noaa: NoaaWeatherServices, db_pool: PgPool,
 ) -> UpdateLocationsSaga
 where
-    C: FnMut(queries::EventEnvelope<LocationZone>) -> Vec<UpdateLocationsCommand>
+    C: FnMut(model::EventEnvelope<LocationZone>) -> Vec<UpdateLocationsCommand>
         + Send
         + Sync
         + 'static,

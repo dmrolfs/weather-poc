@@ -17,7 +17,7 @@ const VERSION: &str = "1.0";
 #[strum(serialize_all = "snake_case")]
 pub enum LocationZoneEvent {
     ZoneSet(LocationZoneCode),
-    ObservationAdded(WeatherFrame),
+    ObservationAdded(Box<WeatherFrame>),
     ForecastUpdated(ZoneForecast),
     AlertActivated(WeatherAlert),
     AlertDeactivated,

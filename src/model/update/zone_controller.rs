@@ -1,8 +1,7 @@
 use super::UpdateLocations;
 use crate::model::update::{UpdateLocationsCommand, UpdateLocationsEvent as E};
 use crate::model::zone::LocationZoneCommand;
-use crate::model::{LocationZone, LocationZoneCode, WeatherAlert};
-use crate::queries;
+use crate::model::{self, LocationZone, LocationZoneCode, WeatherAlert};
 use crate::services::noaa::{AlertApi, NoaaWeatherServices};
 use async_trait::async_trait;
 use cqrs_es::Query;
@@ -17,9 +16,8 @@ pub struct UpdateLocationZoneController {
 
 impl UpdateLocationZoneController {
     pub fn new(
-        noaa: NoaaWeatherServices,
-        location_tx: mpsc::Sender<queries::CommandEnvelope<LocationZone>>,
-        update_tx: mpsc::Sender<queries::CommandEnvelope<UpdateLocations>>,
+        noaa: NoaaWeatherServices, location_tx: mpsc::Sender<model::CommandEnvelope<LocationZone>>,
+        update_tx: mpsc::Sender<model::CommandEnvelope<UpdateLocations>>,
     ) -> Self {
         Self {
             inner: Arc::new(UpdateLocationZoneControllerRef { noaa, location_tx, update_tx }),
@@ -30,8 +28,8 @@ impl UpdateLocationZoneController {
 #[derive(Debug)]
 struct UpdateLocationZoneControllerRef {
     pub noaa: NoaaWeatherServices,
-    pub location_tx: mpsc::Sender<queries::CommandEnvelope<LocationZone>>,
-    pub update_tx: mpsc::Sender<queries::CommandEnvelope<UpdateLocations>>,
+    pub location_tx: mpsc::Sender<model::CommandEnvelope<LocationZone>>,
+    pub update_tx: mpsc::Sender<model::CommandEnvelope<UpdateLocations>>,
 }
 
 impl fmt::Debug for UpdateLocationZoneController {
@@ -54,26 +52,30 @@ impl Query<UpdateLocations> for UpdateLocationZoneController {
                 let zones = zones.clone();
                 let metadata = metadata.clone();
 
-                self.inner.clone().do_spawn_update_observations(
-                    saga_id.as_str(),
-                    zones.as_slice(),
-                    &metadata,
-                );
-                self.inner.clone().do_spawn_update_forecasts(
-                    saga_id.as_str(),
-                    zones.as_slice(),
-                    &metadata,
-                );
+                // self.inner.clone().do_spawn_update_observations(
+                //     saga_id.as_str(),
+                //     zones.as_slice(),
+                //     &metadata,
+                // );
+                //
+                // self.inner.clone().do_spawn_update_forecasts(
+                //     saga_id.as_str(),
+                //     zones.as_slice(),
+                //     &metadata,
+                // );
 
                 let inner_ref = self.inner.clone();
                 tokio::spawn(async move {
-                    inner_ref.do_spawn_update_alerts(saga_id.as_str(), zones.as_slice(), &metadata);
+                    inner_ref
+                        .do_spawn_update_alerts(saga_id.as_str(), zones.as_slice(), &metadata)
+                        .await;
                 });
             }
         }
     }
 }
 
+#[allow(clippy::unnecessary_to_owned)]
 impl UpdateLocationZoneControllerRef {
     #[tracing::instrument(level = "trace", skip())]
     fn do_spawn_update_observations(
@@ -134,7 +136,7 @@ impl UpdateLocationZoneControllerRef {
     async fn do_update_zone_observation(
         &self, update_saga_id: &str, zone: &LocationZoneCode, metadata: HashMap<String, String>,
     ) {
-        let command = queries::CommandEnvelope::new_with_metadata(
+        let command = model::CommandEnvelope::new_with_metadata(
             zone.to_string(),
             LocationZoneCommand::Observe,
             metadata,
@@ -147,7 +149,7 @@ impl UpdateLocationZoneControllerRef {
     async fn do_update_zone_forecast(
         &self, update_saga_id: &str, zone: &LocationZoneCode, metadata: HashMap<String, String>,
     ) {
-        let command = queries::CommandEnvelope::new_with_metadata(
+        let command = model::CommandEnvelope::new_with_metadata(
             zone.to_string(),
             LocationZoneCommand::Forecast,
             metadata,
@@ -172,7 +174,7 @@ impl UpdateLocationZoneControllerRef {
         &self, update_saga_id: &str, zone: LocationZoneCode, alert: WeatherAlert,
         metadata: HashMap<String, String>,
     ) {
-        let command = queries::CommandEnvelope::new_with_metadata(
+        let command = model::CommandEnvelope::new_with_metadata(
             zone,
             LocationZoneCommand::NoteAlert(Some(alert)),
             metadata,
@@ -183,7 +185,7 @@ impl UpdateLocationZoneControllerRef {
 
     #[tracing::instrument(level = "trace", skip())]
     async fn do_send_command(
-        &self, update_saga_id: &str, command: queries::CommandEnvelope<LocationZone>,
+        &self, update_saga_id: &str, command: model::CommandEnvelope<LocationZone>,
     ) {
         let zone = LocationZoneCode::new(command.target_id());
         let metadata = command.metadata().clone();
@@ -194,7 +196,7 @@ impl UpdateLocationZoneControllerRef {
             "sending command to location aggregate channel"
         );
         if send_outcome.is_err() {
-            let command = queries::CommandEnvelope::new_with_metadata(
+            let command = model::CommandEnvelope::new_with_metadata(
                 update_saga_id,
                 UpdateLocationsCommand::NoteLocationUpdateFailure(zone.clone()),
                 metadata,

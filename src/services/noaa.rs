@@ -156,7 +156,7 @@ impl ZoneWeatherApi for NoaaWeatherApi {
             .push(zone.as_ref())
             .push("observations");
 
-        let geojson = self.fetch_geojson("observations", url).await?;
+        let geojson = self.fetch_geojson("zone_observation", url).await?;
         let features = FeatureCollection::try_from(geojson)?;
         Ok(features.into())
     }
@@ -173,7 +173,7 @@ impl ZoneWeatherApi for NoaaWeatherApi {
             .push(zone_code.as_ref())
             .push("forecast");
 
-        let geojson = self.fetch_geojson("forecast", url).await?;
+        let geojson = self.fetch_geojson("zone_forecast", url).await?;
         let feature = Feature::try_from(geojson)?;
         Ok(ZoneForecast::try_from(feature)?)
     }
@@ -215,13 +215,34 @@ impl ZoneWeatherApi for HappyPathWeatherServices {
     ) -> Result<WeatherFrame, NoaaWeatherError> {
         Ok(WeatherFrame {
             timestamp: iso8601_timestamp::Timestamp::now_utc(),
-            temperature: Some(crate::model::QuantitativeValue {
+            temperature: Some(model::QuantitativeValue {
                 value: 72.0,
                 max_value: 80.0,
                 min_value: 60.0,
                 unit_code: "DegreesF".into(),
-                quality_control: crate::model::QualityControl::V,
+                quality_control: model::QualityControl::V,
             }),
+            dewpoint: Some(model::QuantitativeValue {
+                value: 33.2,
+                max_value: 36.3,
+                min_value: 26.2,
+                unit_code: "DegreesF".into(),
+                quality_control: model::QualityControl::C,
+            }),
+            wind_direction: None,
+            wind_speed: None,
+            wind_gust: None,
+            barometric_pressure: None,
+            sea_level_pressure: None,
+            visibility: None,
+            max_temperature_last_24_hours: None,
+            min_temperature_last_24_hours: None,
+            precipitation_last_hour: None,
+            precipitation_last_3_hours: None,
+            precipitation_last_6_hours: None,
+            relative_humidity: None,
+            wind_chill: None,
+            heat_index: None,
         })
     }
 

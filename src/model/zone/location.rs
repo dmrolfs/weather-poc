@@ -49,7 +49,7 @@ impl Aggregate for LocationZone {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 enum LocationZoneState {
     Quiescent(QuiescentLocationZone),
-    Active(ActiveLocationZone),
+    Active(Box<ActiveLocationZone>),
 }
 
 impl Default for LocationZoneState {
@@ -113,12 +113,12 @@ impl AggregateState for QuiescentLocationZone {
     fn apply(&self, event: Self::Event) -> Option<Self::State> {
         match event {
             LocationZoneEvent::ZoneSet(zone_code) => {
-                Some(Self::State::Active(ActiveLocationZone {
+                Some(Self::State::Active(Box::new(ActiveLocationZone {
                     zone_id: zone_code,
                     weather: None,
                     forecast: None,
                     active_alert: false,
-                }))
+                })))
             },
 
             event => {
@@ -152,7 +152,7 @@ impl AggregateState for ActiveLocationZone {
         match command {
             LocationZoneCommand::Observe => {
                 let frame = services.zone_observation(&self.zone_id).await?;
-                Ok(vec![LocationZoneEvent::ObservationAdded(frame)])
+                Ok(vec![LocationZoneEvent::ObservationAdded(Box::new(frame))])
             },
 
             LocationZoneCommand::Forecast => {
@@ -172,10 +172,8 @@ impl AggregateState for ActiveLocationZone {
             },
 
             LocationZoneCommand::WatchZone(new_zone_code) => {
-                Err(LocationZoneError::RejectedCommand(format!(
-                "LocationZone already watching zone, {}, cannot change to watch: {new_zone_code}",
-                self.zone_id
-            )))
+                tracing::debug!("{new_zone_code} zone watch set before - ignoring");
+                Ok(vec![])
             },
         }
     }
@@ -183,25 +181,33 @@ impl AggregateState for ActiveLocationZone {
     #[tracing::instrument(level = "trace")]
     fn apply(&self, event: Self::Event) -> Option<Self::State> {
         match event {
-            LocationZoneEvent::ObservationAdded(frame) => Some(LocationZoneState::Active(Self {
-                weather: Some(frame),
-                ..self.clone()
-            })),
+            LocationZoneEvent::ObservationAdded(frame) => {
+                Some(LocationZoneState::Active(Box::new(Self {
+                    weather: Some(*frame),
+                    ..self.clone()
+                })))
+            },
 
-            LocationZoneEvent::ForecastUpdated(forecast) => Some(LocationZoneState::Active(Self {
-                forecast: Some(forecast),
-                ..self.clone()
-            })),
+            LocationZoneEvent::ForecastUpdated(forecast) => {
+                Some(LocationZoneState::Active(Box::new(Self {
+                    forecast: Some(forecast),
+                    ..self.clone()
+                })))
+            },
 
-            LocationZoneEvent::AlertActivated(_) => Some(LocationZoneState::Active(Self {
-                active_alert: true,
-                ..self.clone()
-            })),
+            LocationZoneEvent::AlertActivated(_) => {
+                Some(LocationZoneState::Active(Box::new(Self {
+                    active_alert: true,
+                    ..self.clone()
+                })))
+            },
 
-            LocationZoneEvent::AlertDeactivated => Some(LocationZoneState::Active(Self {
-                active_alert: false,
-                ..self.clone()
-            })),
+            LocationZoneEvent::AlertDeactivated => {
+                Some(LocationZoneState::Active(Box::new(Self {
+                    active_alert: false,
+                    ..self.clone()
+                })))
+            },
 
             event => {
                 tracing::warn!(?event, "invalid active location zone event -- ignored");

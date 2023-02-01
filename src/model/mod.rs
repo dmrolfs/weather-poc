@@ -1,8 +1,13 @@
+mod agg_connect;
 mod frame;
 pub mod registrar;
 pub mod update;
 pub mod zone;
 
+pub use agg_connect::{
+    CommandEnvelope, CommandRelay, EventBroadcastQuery, EventEnvelope, EventSubscriber,
+    SubscribeCommand,
+};
 pub use frame::WeatherFrame;
 pub use registrar::{Registrar, RegistrarAggregate};
 pub use update::{UpdateLocations, UpdateLocationsSaga};
@@ -496,9 +501,11 @@ pub enum AlertStatus {
 )]
 #[strum(ascii_case_insensitive)]
 pub enum AlertMessageType {
+    Actual,
     Alert,
     Update,
     Cancel,
+    Test,
 }
 
 #[derive(

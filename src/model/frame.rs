@@ -17,21 +17,51 @@ pub struct WeatherFrame {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<QuantitativeValue>,
-    // pub dewpoint: Option<QuantitativeValue>,
-    // pub wind_direction: Option<QuantitativeValue>,
-    // pub wind_speed: Option<QuantitativeValue>,
-    // pub wind_gust: Option<QuantitativeValue>,
-    // pub barometric_pressure: Option<QuantitativeValue>,
-    // pub sea_level_pressure: Option<QuantitativeValue>,
-    // pub visibility: Option<QuantitativeValue>,
-    // pub max_temperature_last_24_hours: Option<QuantitativeValue>,
-    // pub min_temperature_last_24_hours: Option<QuantitativeValue>,
-    // pub precipitation_last_hour: Option<QuantitativeValue>,
-    // pub precipitation_last_3_hours: Option<QuantitativeValue>,
-    // pub precipitation_last_6_hours: Option<QuantitativeValue>,
-    // pub relative_humidity: Option<QuantitativeValue>,
-    // pub wind_chill: Option<QuantitativeValue>,
-    // pub heat_index: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dewpoint: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wind_direction: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wind_speed: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wind_gust: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub barometric_pressure: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sea_level_pressure: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_temperature_last_24_hours: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_temperature_last_24_hours: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precipitation_last_hour: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precipitation_last_3_hours: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precipitation_last_6_hours: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_humidity: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wind_chill: Option<QuantitativeValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heat_index: Option<QuantitativeValue>,
 }
 
 impl From<FeatureCollection> for WeatherFrame {
@@ -68,22 +98,72 @@ impl From<PropertyAggregations> for WeatherFrame {
         Self {
             timestamp: agg.timestamp,
             temperature: agg.property(&QuantitativeProperty::Temperature),
+            dewpoint: agg.property(&QuantitativeProperty::Dewpoint),
+            wind_direction: agg.property(&QuantitativeProperty::WindDirection),
+            wind_speed: agg.property(&QuantitativeProperty::WindSpeed),
+            wind_gust: agg.property(&QuantitativeProperty::WindGust),
+            barometric_pressure: agg.property(&QuantitativeProperty::BarometricPressure),
+            sea_level_pressure: agg.property(&QuantitativeProperty::SeaLevelPressure),
+            visibility: agg.property(&QuantitativeProperty::Visibility),
+            max_temperature_last_24_hours: agg
+                .property(&QuantitativeProperty::MaxTemperatureLast24Hours),
+            min_temperature_last_24_hours: agg
+                .property(&QuantitativeProperty::MinTemperatureLast24Hours),
+            precipitation_last_hour: agg.property(&QuantitativeProperty::PrecipitationLastHour),
+            precipitation_last_3_hours: agg
+                .property(&QuantitativeProperty::PrecipitationLast3Hours),
+            precipitation_last_6_hours: agg
+                .property(&QuantitativeProperty::PrecipitationLast6Hours),
+            relative_humidity: agg.property(&QuantitativeProperty::RelativeHumidity),
+            wind_chill: agg.property(&QuantitativeProperty::WindChill),
+            heat_index: agg.property(&QuantitativeProperty::HeatIndex),
+            // temperature:None,
+            // dewpoint: None,
+            // wind_direction: None,
+            // wind_speed: None,
+            // wind_gust: None,
+            // barometric_pressure: None,
+            // sea_level_pressure: None,
+            // visibility: None,
+            // min_temperature_last_24_hours: None,
+            // precipitation_last_hour: None,
+            // precipitation_last_3_hours: None,
+            // precipitation_last_6_hours:None,
+            // relative_humidity: None,
+            // wind_chill: None,
+            // heat_index:None,
         }
     }
 }
 
+// #[tracing::instrument(level = "trace", skip(feature))]
 fn fold_feature(mut acc: PropertyAggregations, feature: Feature) -> PropertyAggregations {
     if feature.properties.is_none() {
         return acc;
     }
 
+    // tracing::debug!(
+    //     "QUANTITATIVE_PROPERTIES = {:?}",
+    //     QuantitativeProperty::iter()
+    //         .map(|qp| {
+    //             let s: &'static str = qp.into();
+    //             s
+    //         })
+    //         .collect::<Vec<_>>()
+    // );
+
     // let acc_props: &mut HashMap<QuantitativeProperty, QuantitativeAggregation> = &mut acc.properties;
 
     for q_prop in QuantitativeProperty::iter() {
         let prop_name: &'static str = q_prop.into();
+        // tracing::debug!(
+        //     "quantitative_properties: {prop_name} = {:?}",
+        //     feature.property(prop_name)
+        // );
         if let Some(property) = feature.property(prop_name) {
             match serde_json::from_value::<PropertyDetail>(property.clone()) {
                 Ok(detail) => {
+                    // tracing::debug!("quantitative_properties: property detail = {detail:?}");
                     acc.properties
                         .entry(q_prop)
                         .and_modify(|prop_agg| prop_agg.add_detail(detail.clone()))
@@ -118,21 +198,21 @@ fn fold_feature(mut acc: PropertyAggregations, feature: Feature) -> PropertyAggr
 #[strum(serialize_all = "camelCase", ascii_case_insensitive)]
 pub enum QuantitativeProperty {
     Temperature,
-    // Dewpoint,
-    // WindDirection,
-    // WindSpeed,
-    // WindGust,
-    // BarometricPressure,
-    // SeaLevelPressure,
-    // Visibility,
-    // MaxTemperatureLast24Hours,
-    // MinTemperatureLast24Hours,
-    // PrecipitationLastHour,
-    // PrecipitationLast3Hours,
-    // PrecipitationLast6Hours,
-    // RelativeHumidity,
-    // WindChill,
-    // HeatIndex,
+    Dewpoint,
+    WindDirection,
+    WindSpeed,
+    WindGust,
+    BarometricPressure,
+    SeaLevelPressure,
+    Visibility,
+    MaxTemperatureLast24Hours,
+    MinTemperatureLast24Hours,
+    PrecipitationLastHour,
+    PrecipitationLast3Hours,
+    PrecipitationLast6Hours,
+    RelativeHumidity,
+    WindChill,
+    HeatIndex,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -143,7 +223,8 @@ struct PropertyDetail {
 
     unit_code: String,
 
-    quality_control: QualityControl,
+    #[serde(default)]
+    quality_control: Option<QualityControl>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -164,7 +245,7 @@ impl QuantitativeAggregation {
             max_value: detail.value.unwrap_or(0.0),
             min_value: detail.value.unwrap_or(0.0),
             unit_code: detail.unit_code.into(),
-            quality_control: detail.quality_control,
+            quality_control: detail.quality_control.unwrap_or(QualityControl::X),
         }
     }
 
@@ -178,23 +259,25 @@ impl QuantitativeAggregation {
         // same rhs quality control => combine avg and min/max
         // higher rhs quality control => reset aggregation with rhs
 
-        match self.quality_control.cmp(&detail.quality_control) {
-            Ordering::Less => (),
+        if let Some((value, quality)) = detail.value.zip(detail.quality_control) {
+            match self.quality_control.cmp(&quality) {
+                Ordering::Less => (),
 
-            Ordering::Greater => {
-                self.count = 1;
-                self.value_sum = detail.value.unwrap_or(0.0);
-                self.max_value = detail.value.unwrap_or(0.0);
-                self.min_value = detail.value.unwrap_or(0.0);
-                self.quality_control = detail.quality_control;
-            },
+                Ordering::Greater => {
+                    self.count = 1;
+                    self.value_sum = value;
+                    self.max_value = value;
+                    self.min_value = value;
+                    self.quality_control = quality;
+                },
 
-            Ordering::Equal => {
-                self.count += 1;
-                self.value_sum = detail.value.map_or(self.value_sum, |d| d + self.value_sum);
-                self.max_value = detail.value.map_or(self.max_value, |d| d.max(self.max_value));
-                self.min_value = detail.value.map_or(self.min_value, |d| d.min(self.min_value));
-            },
+                Ordering::Equal => {
+                    self.count += 1;
+                    self.value_sum += value;
+                    self.max_value = value.max(self.max_value);
+                    self.min_value = value.min(self.min_value);
+                },
+            }
         }
     }
 }
