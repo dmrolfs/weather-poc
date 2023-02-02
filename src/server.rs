@@ -11,17 +11,18 @@ use crate::Settings;
 use std::fmt;
 
 use axum::error_handling::HandleErrorLayer;
-use axum::http::{Response, StatusCode, Uri};
+use axum::http::{Request, Response, StatusCode, Uri};
 use axum::{BoxError, Router};
 use errors::ApiError;
 use settings_loader::common::database::DatabaseSettings;
 use sqlx::PgPool;
-use std::net::TcpListener;
+use std::net::{IpAddr, Ipv4Addr, TcpListener};
 use tokio::signal;
 use tokio::task::JoinHandle;
 use tower::ServiceBuilder;
+use tower_governor::errors::GovernorError;
 use tower_governor::governor::GovernorConfigBuilder;
-use tower_governor::key_extractor::SmartIpKeyExtractor;
+use tower_governor::key_extractor::{KeyExtractor, SmartIpKeyExtractor};
 use tower_governor::GovernorLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tower_http::ServiceBuilderExt;
@@ -89,6 +90,18 @@ impl RunParameters {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MyKeyExtractor;
+
+impl KeyExtractor for MyKeyExtractor {
+    type Key = IpAddr;
+    type KeyExtractionError = GovernorError;
+
+    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
+        Ok(SmartIpKeyExtractor.extract(req).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)))
+    }
+}
+
 #[tracing::instrument(level = "debug")]
 pub async fn run_http_server(
     listener: TcpListener, db_pool: PgPool, params: &RunParameters,
@@ -99,7 +112,7 @@ pub async fn run_http_server(
         GovernorConfigBuilder::default()
             .burst_size(params.http_api.rate_limit.burst_size)
             .period(params.http_api.rate_limit.per_duration)
-            .key_extractor(SmartIpKeyExtractor)
+            .key_extractor(MyKeyExtractor)
             .finish()
             .unwrap(),
     );

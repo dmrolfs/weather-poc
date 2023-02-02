@@ -6,6 +6,7 @@ use cqrs_es::{EventEnvelope, View};
 use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 pub const UPDATE_LOCATIONS_QUERY_VIEW: &str = "update_locations_query";
 
@@ -16,7 +17,7 @@ pub type UpdateLocationsViewProjection = Arc<UpdateLocationsViewRepository>;
 pub type UpdateLocationsQuery =
     GenericQuery<UpdateLocationsViewRepository, UpdateLocationsView, UpdateLocations>;
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateLocationsView {
     pub state: UpdateLocationsState,

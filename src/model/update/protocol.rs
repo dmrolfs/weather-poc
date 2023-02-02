@@ -4,6 +4,7 @@ use cqrs_es::DomainEvent;
 use pretty_snowflake::Id;
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
+use utoipa::ToSchema;
 
 pub fn location_event_to_command(
     envelope: EventEnvelope<LocationZone>,
@@ -33,7 +34,7 @@ pub enum UpdateLocationsCommand {
 
 const VERSION: &str = "1.0";
 
-#[derive(Debug, Display, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Display, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
 #[strum(serialize_all = "snake_case")]
 pub enum UpdateLocationsEvent {
     Started(Id<UpdateLocations>, Vec<LocationZoneCode>),

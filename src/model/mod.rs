@@ -26,7 +26,7 @@ use std::cmp::Ordering;
 use std::str::FromStr;
 use strum_macros::{Display, EnumMessage, EnumString, EnumVariantNames, IntoStaticStr};
 use url::Url;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 pub fn transpose_result<T, E>(
     results: impl IntoIterator<Item = Result<T, E>>,
@@ -56,27 +56,8 @@ pub trait AggregateState {
     fn apply(&self, event: Self::Event) -> Option<Self::State>;
 }
 
-// #[derive(
-//     Debug,
-//     Copy,
-//     Clone,
-//     PartialEq,
-//     Eq,
-//     Hash,
-//     Display,
-//     EnumString,
-//     EnumVariantNames,
-//     ToSchema,
-//     Serialize,
-//     Deserialize,
-// )]
-// #[strum(serialize_all = "PascalCase", ascii_case_insensitive)]
-// pub enum Location {
-//     Chicago,
-//     Seattle,
-// }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, ToSchema, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, IntoParams, ToSchema, Serialize, Deserialize)]
+#[into_params(names("zone_code"))]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct LocationZoneCode(String);

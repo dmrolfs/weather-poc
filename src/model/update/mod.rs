@@ -11,7 +11,7 @@ pub use queries::{
     UpdateLocationsQuery, UpdateLocationsView, UpdateLocationsViewProjection,
     UPDATE_LOCATIONS_QUERY_VIEW,
 };
-pub use saga::{generate_id, UpdateLocations, UpdateLocationsSaga};
+pub use saga::{generate_id, UpdateLocations, UpdateLocationsSaga, UpdateLocationsState};
 pub use service::UpdateLocationsServices;
 pub use zone_controller::UpdateLocationZoneController;
 

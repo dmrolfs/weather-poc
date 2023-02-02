@@ -28,7 +28,6 @@ init-db:
 run:
   RUST_BACKTRACE=full RUST_LOG="info,weather=trace" cargo run -- --secrets ./resources/secrets.yaml | bunyan
 
-#build-docker:
 #  cargo test
 #  docker build --tag services --file Dockerfile
 

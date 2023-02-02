@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use strum_macros::Display;
+use utoipa::ToSchema;
 
 pub type UpdateLocationsSaga = Arc<PostgresCqrs<UpdateLocations>>;
 
@@ -52,7 +53,7 @@ impl Aggregate for UpdateLocations {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
 pub enum UpdateLocationsState {
     Quiescent(QuiescentLocationsUpdate),
     Active(ActiveLocationsUpdate),
@@ -153,14 +154,14 @@ pub type LocationUpdatedSteps = BitFlags<LocationUpdatedStep>;
 
 #[bitflags]
 #[repr(u8)]
-#[derive(Debug, Display, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Display, Copy, Clone, PartialEq, Eq, ToSchema, Serialize, Deserialize)]
 pub enum LocationUpdatedStep {
     Observation = 0b0001,
     Forecast = 0b0010,
     Alert = 0b0100,
 }
 
-#[derive(Debug, Display, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Display, Copy, Clone, PartialEq, Eq, ToSchema, Serialize, Deserialize)]
 pub enum UpdateCompletionStatus {
     Succeeded,
     Failed,
@@ -186,7 +187,7 @@ impl LocationUpdateStatusExt for LocationUpdateStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
 pub struct ActiveLocationsUpdate {
     pub aggregate_id: Id<UpdateLocations>,
     pub location_statuses: HashMap<LocationZoneCode, LocationUpdateStatus>,
