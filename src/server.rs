@@ -10,6 +10,7 @@ use crate::settings::HttpApiSettings;
 use crate::Settings;
 use std::fmt;
 
+use crate::server::state::AppState;
 use axum::error_handling::HandleErrorLayer;
 use axum::http::{Request, Response, StatusCode, Uri};
 use axum::{BoxError, Router};
@@ -46,6 +47,8 @@ impl Server {
     #[tracing::instrument(level = "debug", skip(settings))]
     pub async fn build(settings: &Settings) -> Result<Self, ApiError> {
         let connection_pool = get_connection_pool(&settings.database);
+        let app_state = state::make_app_state(connection_pool).await?;
+
         let address = settings.http_api.server.address();
         let listener = tokio::net::TcpListener::bind(&address).await?;
         tracing::info!(
@@ -57,7 +60,7 @@ impl Server {
 
         let server_handle = run_http_server(
             std_listener,
-            connection_pool,
+            app_state,
             &RunParameters::from_settings(settings),
         )
         .await?;
@@ -104,10 +107,8 @@ impl KeyExtractor for MyKeyExtractor {
 
 #[tracing::instrument(level = "debug")]
 pub async fn run_http_server(
-    listener: TcpListener, db_pool: PgPool, params: &RunParameters,
+    listener: TcpListener, state: AppState, params: &RunParameters,
 ) -> Result<HttpJoinHandle, ApiError> {
-    let state = state::initialize_app_state(db_pool).await?;
-
     let governor_conf = Box::new(
         GovernorConfigBuilder::default()
             .burst_size(params.http_api.rate_limit.burst_size)

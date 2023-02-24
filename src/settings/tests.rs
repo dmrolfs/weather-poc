@@ -6,7 +6,7 @@ mod loading {
     use super::*;
     use crate::settings::http_api_settings::RateLimitSettings;
     use pretty_assertions::assert_eq;
-    use secrecy::Secret;
+    use secrecy::{ExposeSecret, Secret};
     use settings_loader::common::http::HttpServerSettings;
     use std::time::Duration;
 
@@ -15,7 +15,7 @@ mod loading {
             server: HttpServerSettings { host: "0.0.0.0".to_string(), port: 8000 },
             timeout: Duration::from_secs(2 * 60),
             rate_limit: RateLimitSettings {
-                nr_requests: 100,
+                burst_size: 100,
                 per_duration: Duration::from_secs(60),
             },
         },
@@ -24,7 +24,7 @@ mod loading {
             password: Secret::new("neo".to_string()),
             host: "localhost".to_string(),
             port: 5432,
-            database_name: "bank".to_string(),
+            database_name: "weather".to_string(),
             require_ssl: true,
             min_connections: None,
             max_connections: Some(10),
@@ -42,8 +42,8 @@ mod loading {
             |  host: 0.0.0.0
             |  port: 8000
             |  rate_limit:
-            |    nr_requests: 100
-            |    per_secs: 60
+            |    burst_size: 100
+            |    per_seconds: 60
             |database:
             |  username: user_1
             |  password: my_password
@@ -64,7 +64,7 @@ mod loading {
                 server: HttpServerSettings { host: "0.0.0.0".to_string(), port: 8000 },
                 timeout: Duration::from_secs(300),
                 rate_limit: RateLimitSettings {
-                    nr_requests: 100,
+                    burst_size: 100,
                     per_duration: Duration::from_secs(60),
                 },
             },
@@ -91,7 +91,7 @@ mod loading {
     fn test_basic_load() {
         let c = assert_ok!(config::Config::builder()
             .add_source(config::File::from(std::path::PathBuf::from(
-                "./tests/data/settings.yaml"
+                "./tests/data/application.yaml"
             )))
             .build());
 
@@ -99,15 +99,20 @@ mod loading {
 
         let expected = Settings {
             http_api: HttpApiSettings {
-                timeout: Duration::from_secs(300),
+                timeout: Duration::from_secs(120),
+                rate_limit: RateLimitSettings {
+                    burst_size: 8,
+                    per_duration: Duration::from_millis(500),
+                    ..SETTINGS.http_api.rate_limit.clone()
+                },
                 ..SETTINGS.http_api.clone()
             },
             database: DatabaseSettings {
-                database_name: "bank".to_string(),
-                username: "postgres".to_string(),
-                password: Secret::new("demo_pass".to_string()),
+                database_name: "weather".to_string(),
+                username: "settings_user".to_string(),
+                password: Secret::new("my_pass".to_string()),
                 require_ssl: false,
-                max_lifetime: None,
+                max_lifetime: Some(Duration::from_secs(1800)),
                 ..SETTINGS.database.clone()
             },
             ..SETTINGS.clone()
@@ -145,11 +150,18 @@ mod loading {
                 );
 
                 let expected = Settings {
+                    http_api: HttpApiSettings {
+                        rate_limit: RateLimitSettings {
+                            burst_size: 8,
+                            per_duration: Duration::from_millis(500),
+                            ..SETTINGS.http_api.rate_limit.clone()
+                        },
+                        ..SETTINGS.http_api.clone()
+                    },
                     correlation: CorrelationSettings { machine_id: 17, node_id: 13 },
                     database: DatabaseSettings {
                         username: "postgres".to_string(),
                         password: Secret::new("demo_pass".to_string()),
-                        database_name: "bank".to_string(),
                         require_ssl: false,
                         ..SETTINGS.database.clone()
                     },
@@ -193,10 +205,15 @@ mod loading {
                             host: "127.0.0.1".to_string(),
                             ..SETTINGS.http_api.server.clone()
                         },
+                        rate_limit: RateLimitSettings {
+                            burst_size: 8,
+                            per_duration: Duration::from_millis(500),
+                            ..SETTINGS.http_api.rate_limit.clone()
+                        },
                         ..SETTINGS.http_api.clone()
                     },
                     database: DatabaseSettings {
-                        username: "snoopy".to_string(),
+                        username: "gumby".to_string(),
                         password: Secret::new("zen_master_12".to_string()),
                         require_ssl: false,
                         ..SETTINGS.database.clone()
@@ -205,6 +222,10 @@ mod loading {
                 };
 
                 tracing::debug!(?actual, ?expected, "checking local settings");
+                assert_eq!(
+                    actual.database.password.expose_secret(),
+                    expected.database.password.expose_secret()
+                );
                 assert_eq!(actual, expected);
             },
         );
@@ -239,6 +260,14 @@ mod loading {
                 );
 
                 let expected = Settings {
+                    http_api: HttpApiSettings {
+                        rate_limit: RateLimitSettings {
+                            burst_size: 8,
+                            per_duration: Duration::from_millis(500),
+                            ..SETTINGS.http_api.rate_limit.clone()
+                        },
+                        ..SETTINGS.http_api.clone()
+                    },
                     correlation: CorrelationSettings { machine_id: 1, node_id: 1 },
                     database: DatabaseSettings {
                         username: "neo".to_string(),

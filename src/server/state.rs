@@ -76,7 +76,7 @@ impl FromRef<AppState> for PgPool {
 }
 
 #[tracing::instrument(level = "debug")]
-pub async fn initialize_app_state(db_pool: PgPool) -> Result<AppState, ApiError> {
+pub async fn make_app_state(db_pool: PgPool) -> Result<AppState, ApiError> {
     let user_agent = axum::http::HeaderValue::from_str("(here.com, contact@example.com)")
         .expect("invalid user_agent");
     let base_url = Url::from_str("https://api.weather.gov")?;

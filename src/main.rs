@@ -3,6 +3,11 @@ use settings_loader::{LoadingOptions, SettingsLoader};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tagid::snowflake::SnowflakeGenerator::single_node(
+        tagid::snowflake::GenerationStrategy::RealTime,
+    );
+    tagid::snowflake::pretty::IdPrettifier::<tagid::snowflake::pretty::AlphabetCodec>::global_initialize(tagid::snowflake::pretty::BASE_23.clone());
+
     let subscriber = weather::tracing::get_tracing_subscriber("info");
     weather::tracing::init_subscriber(subscriber);
 

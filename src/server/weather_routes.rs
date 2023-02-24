@@ -66,10 +66,11 @@ pub fn api() -> Router<AppState> {
 #[tracing::instrument(level = "debug", skip(reg))]
 async fn update_weather(State(reg): State<RegistrarAggregate>) -> impl IntoResponse {
     let aggregate_id = registrar::singleton_id();
-    reg.execute(aggregate_id.pretty(), RegistrarCommand::UpdateWeather)
+
+    reg.execute(&aggregate_id.id, RegistrarCommand::UpdateWeather)
         .await
         .map_err::<ApiError, _>(|err| err.into())
-        .map(move |()| (StatusCode::OK, aggregate_id.pretty().to_string()))
+        .map(move |()| (StatusCode::OK, aggregate_id.id.to_string()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, IntoParams, ToSchema, Serialize, Deserialize)]
@@ -133,7 +134,7 @@ async fn serve_all_zones(
 ) -> impl IntoResponse {
     let registrar_id = registrar::singleton_id();
     let view = view_repo
-        .load(registrar_id.pretty())
+        .load(&registrar_id.id)
         .await
         .map_err::<ApiError, _>(|error| error.into())
         .map(|v| OptionalResult(v.map(Json)));
@@ -154,7 +155,7 @@ async fn serve_all_zones(
 #[tracing::instrument(level = "trace", skip(reg))]
 async fn delete_all_zones(State(reg): State<RegistrarAggregate>) -> impl IntoResponse {
     let aggregate_id = registrar::singleton_id();
-    reg.execute(aggregate_id.pretty(), RegistrarCommand::ClearZoneMonitoring)
+    reg.execute(&aggregate_id.id, RegistrarCommand::ClearZoneMonitoring)
         .await
         .map_err::<ApiError, _>(|err| err.into())
 }
@@ -175,7 +176,7 @@ async fn add_forecast_zone(
 ) -> impl IntoResponse {
     let aggregate_id = registrar::singleton_id();
     reg.execute(
-        aggregate_id.pretty(),
+        &aggregate_id.id,
         RegistrarCommand::MonitorForecastZone(zone_code),
     )
     .await
@@ -198,7 +199,7 @@ async fn remove_forecast_zone(
 ) -> impl IntoResponse {
     let aggregate_id = registrar::singleton_id();
     reg.execute(
-        aggregate_id.pretty(),
+        &aggregate_id.id,
         RegistrarCommand::ForgetForecastZone(zone_code),
     )
     .await

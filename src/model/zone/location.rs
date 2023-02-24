@@ -8,9 +8,9 @@ use crate::services::noaa::ZoneWeatherApi;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use postgres_es::PostgresCqrs;
-use pretty_snowflake::Label;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tagid::Label;
 
 pub type LocationZoneAggregate = Arc<PostgresCqrs<LocationZone>>;
 

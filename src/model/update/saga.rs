@@ -8,25 +8,31 @@ use either::{Either, Left, Right};
 use enumflags2::{bitflags, BitFlags};
 use once_cell::sync::Lazy;
 use postgres_es::PostgresCqrs;
-use pretty_snowflake::{Id, Label};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use strum_macros::Display;
+use tagid::{CuidGenerator, CuidId, Entity, Id, Label};
 use utoipa::ToSchema;
 
 pub type UpdateLocationsSaga = Arc<PostgresCqrs<UpdateLocations>>;
+pub type UpdateLocationsId =
+    Id<UpdateLocations, <<UpdateLocations as Entity>::IdGen as tagid::IdGenerator>::IdType>;
 
 pub const AGGREGATE_TYPE: &str = "update_locations";
 
 #[inline]
-pub fn generate_id() -> Id<UpdateLocations> {
-    pretty_snowflake::generator::next_id()
+pub fn generate_id() -> UpdateLocationsId {
+    UpdateLocations::next_id()
 }
 
 #[derive(Debug, Default, Clone, Label, PartialEq, Serialize, Deserialize)]
 pub struct UpdateLocations {
     state: UpdateLocationsState,
+}
+
+impl Entity for UpdateLocations {
+    type IdGen = tagid::snowflake::pretty::PrettySnowflakeGenerator;
 }
 
 #[async_trait]
@@ -115,7 +121,9 @@ impl AggregateState for QuiescentLocationsUpdate {
 
         match command {
             Cmd::UpdateLocations(aggregate_id, zones) if !zones.is_empty() => {
-                services.add_subscriber(aggregate_id.pretty(), zones.as_slice()).await;
+                services
+                    .add_subscriber(aggregate_id.id.to_string(), zones.as_slice())
+                    .await;
                 Ok(vec![Evt::Started(aggregate_id, zones)])
             },
 
@@ -189,7 +197,7 @@ impl LocationUpdateStatusExt for LocationUpdateStatus {
 
 #[derive(Debug, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
 pub struct ActiveLocationsUpdate {
-    pub aggregate_id: Id<UpdateLocations>,
+    pub aggregate_id: UpdateLocationsId,
     pub location_statuses: HashMap<LocationZoneCode, LocationUpdateStatus>,
 }
 

@@ -1,7 +1,6 @@
-use crate::model::update::saga::LocationUpdateStatus;
-use crate::model::{EventEnvelope, LocationZone, LocationZoneCode, UpdateLocations};
+use crate::model::update::saga::{LocationUpdateStatus, UpdateLocationsId};
+use crate::model::{EventEnvelope, LocationZone, LocationZoneCode};
 use cqrs_es::DomainEvent;
-use pretty_snowflake::Id;
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 use utoipa::ToSchema;
@@ -25,7 +24,7 @@ pub fn location_event_to_command(
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpdateLocationsCommand {
-    UpdateLocations(Id<UpdateLocations>, Vec<LocationZoneCode>),
+    UpdateLocations(UpdateLocationsId, Vec<LocationZoneCode>),
     NoteLocationObservationUpdated(LocationZoneCode),
     NoteLocationForecastUpdated(LocationZoneCode),
     NoteLocationAlertStatusUpdated(LocationZoneCode),
@@ -37,7 +36,7 @@ const VERSION: &str = "1.0";
 #[derive(Debug, Display, Clone, PartialEq, ToSchema, Serialize, Deserialize)]
 #[strum(serialize_all = "snake_case")]
 pub enum UpdateLocationsEvent {
-    Started(Id<UpdateLocations>, Vec<LocationZoneCode>),
+    Started(UpdateLocationsId, Vec<LocationZoneCode>),
     LocationUpdated(LocationZoneCode, LocationUpdateStatus),
     Completed,
     Failed,

@@ -12,26 +12,18 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use once_cell::sync::Lazy;
 use postgres_es::{PostgresCqrs, PostgresViewRepository};
-use pretty_snowflake::{Id, Label, Labeling};
 use serde::{Deserialize, Serialize};
 use service::RegistrarApi;
 use sqlx::PgPool;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tagid::{Entity, Id, Label};
 
 pub type RegistrarAggregate = Arc<PostgresCqrs<Registrar>>;
 
 pub const AGGREGATE_TYPE: &str = "registrar";
-pub const REGISTRAR_SNOWFLAKE_ID: i64 = 1;
-pub const REGISTRAR_PRETTY_ID: &str = "<singleton>";
 
-static REGISTRAR_SINGLETON_ID: Lazy<Id<Registrar>> = Lazy::new(|| {
-    Id::direct(
-        <Registrar as Label>::labeler().label(),
-        REGISTRAR_SNOWFLAKE_ID,
-        REGISTRAR_PRETTY_ID,
-    )
-});
+static REGISTRAR_SINGLETON_ID: Lazy<RegistrarId> = Lazy::new(Registrar::next_id);
 
 pub fn make_registrar_aggregate(
     db_pool: PgPool, location_agg: LocationZoneAggregate, update_saga: UpdateLocationsSaga,
@@ -61,14 +53,20 @@ pub fn make_registrar_aggregate(
     (agg, monitored_zones_view)
 }
 
+pub type RegistrarId = Id<Registrar, <<Registrar as Entity>::IdGen as tagid::IdGenerator>::IdType>;
+
 #[inline]
-pub fn singleton_id() -> Id<Registrar> {
+pub fn singleton_id() -> RegistrarId {
     REGISTRAR_SINGLETON_ID.clone()
 }
 
 #[derive(Debug, Default, Clone, Label, PartialEq, Serialize, Deserialize)]
 pub struct Registrar {
     location_codes: HashSet<LocationZoneCode>,
+}
+
+impl tagid::Entity for Registrar {
+    type IdGen = tagid::snowflake::pretty::PrettySnowflakeGenerator;
 }
 
 #[async_trait]
@@ -204,11 +202,9 @@ mod service {
 
             let saga_id = crate::model::update::generate_id();
             let metadata =
-                maplit::hashmap! { "correlation".to_string() => saga_id.pretty().to_string(), };
+                maplit::hashmap! { "correlation".to_string() => saga_id.id.to_string(), };
             let command = UpdateLocationsCommand::UpdateLocations(saga_id.clone(), zone_ids);
-            self.update
-                .execute_with_metadata(saga_id.pretty(), command, metadata)
-                .await?;
+            self.update.execute_with_metadata(&saga_id.id, command, metadata).await?;
             // Ok(events)
             Ok(())
         }
