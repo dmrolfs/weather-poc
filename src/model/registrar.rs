@@ -10,20 +10,18 @@ use super::{registrar, LocationZoneAggregate, LocationZoneCode, UpdateLocationsS
 use crate::model::TracingQuery;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use once_cell::sync::Lazy;
 use postgres_es::{PostgresCqrs, PostgresViewRepository};
 use serde::{Deserialize, Serialize};
 use service::RegistrarApi;
 use sqlx::PgPool;
 use std::collections::HashSet;
 use std::sync::Arc;
+use smol_str::SmolStr;
 use tagid::{Entity, Id, Label};
 
 pub type RegistrarAggregate = Arc<PostgresCqrs<Registrar>>;
 
 pub const AGGREGATE_TYPE: &str = "registrar";
-
-static REGISTRAR_SINGLETON_ID: Lazy<RegistrarId> = Lazy::new(Registrar::next_id);
 
 pub fn make_registrar_aggregate(
     db_pool: PgPool, location_agg: LocationZoneAggregate, update_saga: UpdateLocationsSaga,
@@ -57,7 +55,7 @@ pub type RegistrarId = Id<Registrar, <<Registrar as Entity>::IdGen as tagid::IdG
 
 #[inline]
 pub fn singleton_id() -> RegistrarId {
-    REGISTRAR_SINGLETON_ID.clone()
+    Registrar::next_id()
 }
 
 #[derive(Debug, Default, Clone, Label, PartialEq, Serialize, Deserialize)]
@@ -65,8 +63,17 @@ pub struct Registrar {
     location_codes: HashSet<LocationZoneCode>,
 }
 
-impl tagid::Entity for Registrar {
-    type IdGen = tagid::snowflake::pretty::PrettySnowflakeGenerator;
+pub struct SingletonIdGenerator;
+
+const REGISTRAR_SINGLETON_ID: &str = "<singleton>";
+
+impl tagid::IdGenerator for SingletonIdGenerator {
+    type IdType = SmolStr;
+    fn next_id_rep() -> Self::IdType { SmolStr::new(REGISTRAR_SINGLETON_ID) }
+}
+
+impl Entity for Registrar {
+    type IdGen = SingletonIdGenerator;
 }
 
 #[async_trait]
@@ -201,6 +208,7 @@ mod service {
             let zone_ids = zones.iter().copied().cloned().collect();
 
             let saga_id = crate::model::update::generate_id();
+            tracing::debug!("DMR: Update Locations identifier: {saga_id:?}");
             let metadata =
                 maplit::hashmap! { "correlation".to_string() => saga_id.id.to_string(), };
             let command = UpdateLocationsCommand::UpdateLocations(saga_id.clone(), zone_ids);

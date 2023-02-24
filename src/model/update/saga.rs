@@ -12,12 +12,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use strum_macros::Display;
-use tagid::{CuidGenerator, CuidId, Entity, Id, Label};
+use tagid::{CuidId, Entity, Id, Label};
 use utoipa::ToSchema;
 
 pub type UpdateLocationsSaga = Arc<PostgresCqrs<UpdateLocations>>;
-pub type UpdateLocationsId =
-    Id<UpdateLocations, <<UpdateLocations as Entity>::IdGen as tagid::IdGenerator>::IdType>;
+pub type UpdateLocationsId = CuidId<UpdateLocations>;
 
 pub const AGGREGATE_TYPE: &str = "update_locations";
 
@@ -32,7 +31,7 @@ pub struct UpdateLocations {
 }
 
 impl Entity for UpdateLocations {
-    type IdGen = tagid::snowflake::pretty::PrettySnowflakeGenerator;
+    type IdGen = tagid::CuidGenerator;
 }
 
 #[async_trait]
@@ -121,6 +120,7 @@ impl AggregateState for QuiescentLocationsUpdate {
 
         match command {
             Cmd::UpdateLocations(aggregate_id, zones) if !zones.is_empty() => {
+                tracing::debug!("DMR: Saga[{aggregate_id:?} starting to update zones: {zones:?}");
                 services
                     .add_subscriber(aggregate_id.id.to_string(), zones.as_slice())
                     .await;

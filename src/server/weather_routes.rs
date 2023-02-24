@@ -66,6 +66,7 @@ pub fn api() -> Router<AppState> {
 #[tracing::instrument(level = "debug", skip(reg))]
 async fn update_weather(State(reg): State<RegistrarAggregate>) -> impl IntoResponse {
     let aggregate_id = registrar::singleton_id();
+    tracing::debug!("DMR: registrar singleton id: {aggregate_id:?}");
 
     reg.execute(&aggregate_id.id, RegistrarCommand::UpdateWeather)
         .await
